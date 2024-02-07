@@ -1,0 +1,65 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: testsuite-pipeline
+spec:
+  params:
+    - default: 'quay.io/kuadrant/testsuite:unstable'
+      description: Testsuite image to run tests on
+      name: testsuite-image
+      type: string
+    - description: API URL of the Openshift cluster
+      name: kube-api
+      type: string
+    - description: Name of the Openshift project
+      name: project
+      type: string
+    - description: Makefile target for tests
+      name: make-target
+      type: string
+    - default: pipeline-settings-default
+      description: Config Map with settings for the testsuite
+      name: settings-cm
+      type: string
+    - default: testsuite
+      description: Report Portal Project to store test results
+      name: rp-project
+      type: string
+  tasks:
+    - name: run-tests
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: kube-api
+          value: $(params.kube-api)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: $(params.make-target)
+        - name: settings-cm
+          value: $(params.settings-cm)
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+    - name: upload-test-results
+      params:
+        - name: pipelinerun-id
+          value: $(context.pipelineRun.uid)
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: make-target
+          value: $(params.make-target)
+        - name: rp-project
+          value: $(params.rp-project)
+      runAfter:
+        - run-tests
+      taskRef:
+        kind: Task
+        name: upload-test-results
+      workspaces:
+        - name: shared-workspace
+  workspaces:
+    - name: shared-workspace
+
