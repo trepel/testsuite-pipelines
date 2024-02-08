@@ -1,0 +1,134 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: testsuite-pipeline-embedded
+spec:
+  params:
+    - default: 'quay.io/kuadrant/testsuite:unstable'
+      description: Testsuite image to run tests on
+      name: testsuite-image
+      type: string
+    - description: API URL of the Openshift cluster
+      name: kube-api
+      type: string
+    - description: Name of the Openshift project
+      name: project
+      type: string
+    - description: Makefile target for tests
+      name: make-target
+      type: string
+    - default: pipeline-settings-default
+      description: Config Map with settings for the testsuite
+      name: settings-cm
+      type: string
+    - default: testsuite
+      description: Report Portal Project to store test results
+      name: rp-project
+      type: string
+  tasks:
+    - name: run-tests-upload-results
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: kube-api
+          value: $(params.kube-api)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: $(params.make-target)
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: rp-project
+          value: $(params.rp-project)
+      taskSpec:
+        params:
+          - name: testsuite-image
+          - name: kube-api
+          - name: project
+          - name: make-target
+          - name: settings-cm
+          - name: rp-project
+        steps:
+          - args:
+              - >-
+                cp /var/kuadrant-settings/settings.local.yaml
+                /opt/workdir/kuadrant-testsuite/config && oc login $(params.kube-api)
+                --username $(KUBE_USER) --password $(KUBE_PASSWORD)
+                --insecure-skip-tls-verify && (make $(params.make-target) || true)
+            command:
+              - /bin/bash
+              - '-cx'
+            resources:
+              limits:
+                cpu: '1'
+                memory: 1000Mi
+            env:
+              - name: WORKSPACE
+                value: $(workspaces.shared-workspace.path)
+              - name: KUADRANT_cluster__project
+                value: $(params.project)
+              - name: KUADRANT_control_plane__hub__project
+                value: $(params.project)
+              - name: KUBE_USER
+                valueFrom:
+                  secretKeyRef:
+                    key: KUBE_USER
+                    name: openshift-pipelines-credentials
+              - name: KUBE_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    key: KUBE_PASSWORD
+                    name: openshift-pipelines-credentials
+            image: $(params.testsuite-image)
+            imagePullPolicy: Always
+            name: run-tests
+            volumeMounts:
+              - mountPath: /var/kuadrant-settings
+                name: $(params.settings-cm)
+          - args:
+              - make reportportal
+            command:
+              - /bin/bash
+              - '-cx'
+            resources:
+              limits:
+                cpu: '1'
+                memory: 1000Mi
+            env:
+              - name: WORKSPACE
+                value: $(workspaces.shared-workspace.path)
+              - name: RP_LAUNCH_NAME
+                value: pipeline-$(params.make-target)-$(context.pipelineRun.uid)
+              - name: RP_PROJECT
+                value: $(params.rp-project)
+              - name: REPORTPORTAL
+                valueFrom:
+                  secretKeyRef:
+                    key: RP_URL
+                    name: rp-credentials
+              - name: RP_TOKEN
+                valueFrom:
+                  secretKeyRef:
+                    key: RP_TOKEN
+                    name: rp-credentials
+              - name: REQUESTS_CA_BUNDLE
+                value: /var/ca-bundle/tls-ca-bundle.pem
+            image: $(params.testsuite-image)
+            imagePullPolicy: Always
+            name: upload-test-results
+            volumeMounts:
+              - mountPath: /var/ca-bundle
+                name: rp-ca-bundle
+        volumes:
+          - configMap:
+              name: $(params.settings-cm)
+            name: $(params.settings-cm)
+          - configMap:
+              name: rp-ca-bundle
+            name: rp-ca-bundle
+        workspaces:
+          - name: shared-workspace
+      workspaces:
+        - name: shared-workspace
+  workspaces:
+    - name: shared-workspace
