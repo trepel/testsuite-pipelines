@@ -6,7 +6,5 @@ commonLabels:
   deployment: kuadrant-qe-pipeline
 
 resources:
-  - run-tests-task.yaml
-  - upload-test-results-task.yaml
   - pipeline.yaml
 
