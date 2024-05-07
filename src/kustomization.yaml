@@ -7,4 +7,4 @@ commonLabels:
 
 resources:
   - pipeline.yaml
-
+  - ../nightly/

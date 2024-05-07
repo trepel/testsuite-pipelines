@@ -1,0 +1,12 @@
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: nightly-cron-listener
+spec:
+  serviceAccountName: pipeline
+  triggers:
+    - name: nightly-kuadrant-trigger
+      bindings:
+        - ref: nightly-trigger-binding
+      template:
+        ref: pipeline-trigger-template

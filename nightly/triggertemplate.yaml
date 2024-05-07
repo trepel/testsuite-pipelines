@@ -1,0 +1,42 @@
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: pipeline-trigger-template
+spec:
+  params:
+    - name: kube-api
+      description: API URL of the Openshift cluster
+    - name: project
+      description: Name of the Openshift project
+      default: kuadrant
+    - name: make-target
+      description: Makefile target for tests
+      default: test
+    - name: launch-name
+      description: Prefix of the launch name saved in report portal(nightly, username, manual, etc.)
+      default: pipeline
+    - name: rp-project
+      description: Report Portal Project to store test results
+      default: testsuite
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1beta1
+      kind: PipelineRun
+      metadata:
+        generateName: pipeline-run-$(tt.params.make-target)-
+      spec:
+        pipelineRef:
+          name: testsuite-pipeline
+        params:
+          - name: kube-api
+            value: $(tt.params.kube-api)
+          - name: project
+            value: $(tt.params.project)
+          - name: make-target
+            value: $(tt.params.make-target)
+          - name: launch-name
+            value: $(tt.params.launch-name)
+          - name: rp-project
+            value: $(tt.params.rp-project)
+        workspaces:
+          - name: shared-workspace
+            emptyDir: {}

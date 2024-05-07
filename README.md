@@ -5,7 +5,7 @@ This repository contains Kuadrant testsuite pipeline objects
 Deployment
 ---
 * Install the `openshift-pipelines` Openshift operator on the cluster
-* Apply required pipeline and task resources `oc apply -k src/ -n ${PIPELINE_NAMESPACE}`
+* Apply all pipelines and their resources `oc apply -k src/ -n ${PIPELINE_NAMESPACE}`
 
 Secrets
 ---
@@ -31,3 +31,12 @@ Pipeline execution
 3. Using the `tkn` CLI
     - Install the `tkn` CLI tool
     - Execute the `tkn pipeline start` command with the required parameters
+
+Trigger nightly pipeline manually
+---
+```shell
+# kuadrant
+kubectl create job --from=cronjob/trigger-nightly-kuadrant trigger-nightly-kuadrant-$(date +%d.%m)-$(whoami)-manual -n ${PIPELINE_NAMESPACE}
+# authorino-standalone
+kubectl create job --from=cronjob/trigger-nightly-authorino-standalone trigger-nightly-authorino-standalone-$(date +%d.%m)-$(whoami)-manual -n ${PIPELINE_NAMESPACE}
+```
