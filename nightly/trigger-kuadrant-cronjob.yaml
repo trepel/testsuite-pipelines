@@ -13,7 +13,7 @@ spec:
           serviceAccountName: pipeline
           containers:
             - name: trigger-nightly-kuadrant
-              image: curlimages/curl
+              image: quay.io/curl/curl:latest
               command: ["/bin/sh", "-cx"]
               args: ["curl -X POST --data '{\"make-target\": \"kuadrant\"}' el-nightly-cron-listener.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local:8080"]
           restartPolicy: Never
