@@ -16,12 +16,17 @@ spec:
     - description: Name of the Openshift project
       name: project
       type: string
-    - description: Makefile target for tests
+    - default: test
+      description: Makefile target for tests
       name: make-target
       type: string
     - default: pipeline-settings-default
       description: Config Map with settings for the testsuite
       name: settings-cm
+      type: string
+    - default: pipeline
+      description: Prefix of the launch name saved in report portal(nightly, username, manual, etc.)
+      name: launch-name
       type: string
     - default: testsuite
       description: Report Portal Project to store test results
@@ -40,6 +45,8 @@ spec:
           value: $(params.make-target)
         - name: settings-cm
           value: $(params.settings-cm)
+        - name: launch-name
+          value: $(params.launch-name)
         - name: rp-project
           value: $(params.rp-project)
       taskSpec:
@@ -49,6 +56,7 @@ spec:
           - name: project
           - name: make-target
           - name: settings-cm
+          - name: launch-name
           - name: rp-project
         steps:
           - args:
@@ -100,7 +108,7 @@ spec:
               - name: WORKSPACE
                 value: $(workspaces.shared-workspace.path)
               - name: RP_LAUNCH_NAME
-                value: pipeline-$(params.make-target)-$(context.pipelineRun.uid)
+                value: $(params.launch-name)-$(params.make-target)
               - name: RP_PROJECT
                 value: $(params.rp-project)
               - name: REPORTPORTAL

@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+commonLabels:
+  deployment: kuadrant-qe-pipeline-nightly
+
+resources:
+  - triggertemplate.yaml
+  - triggerbinding.yaml
+  - eventlistener.yaml
+  - trigger-kuadrant-cronjob.yaml
+  - trigger-authorino-standalone-cronjob.yaml

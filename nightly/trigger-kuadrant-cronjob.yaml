@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: trigger-nightly-kuadrant
+spec:
+  schedule: "0 5 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pipeline
+          containers:
+            - name: trigger-nightly-kuadrant
+              image: curlimages/curl
+              command: ["/bin/sh", "-cx"]
+              args: ["curl -X POST --data '{\"make-target\": \"kuadrant\"}' el-nightly-cron-listener.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local:8080"]
+          restartPolicy: Never

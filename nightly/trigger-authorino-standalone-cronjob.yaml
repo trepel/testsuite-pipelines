@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: trigger-nightly-authorino-standalone
+spec:
+  schedule: "0 6 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: pipeline
+          containers:
+            - name: trigger-nightly-authorino-standalone
+              image: curlimages/curl
+              command: ["/bin/sh", "-cx"]
+              args: ["curl -X POST --data '{\"make-target\": \"authorino-standalone\"}' el-nightly-cron-listener.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local:8080"]
+          restartPolicy: Never
