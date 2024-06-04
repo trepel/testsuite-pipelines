@@ -55,11 +55,11 @@ spec:
               - >-
                 cp /var/kuadrant-settings/settings.local.yaml
                 /opt/workdir/kuadrant-testsuite/config && oc login $(params.kube-api)
-                --username $(KUBE_USER) --password $(KUBE_PASSWORD)
+                --username ${KUBE_USER} --password ${KUBE_PASSWORD}
                 --insecure-skip-tls-verify && (make $(params.make-target) || true)
             command:
               - /bin/bash
-              - '-cx'
+              - '-cv'
             resources:
               limits:
                 cpu: '1'
