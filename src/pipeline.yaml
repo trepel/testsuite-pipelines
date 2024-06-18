@@ -13,7 +13,8 @@ spec:
     - description: API URL of the Openshift cluster
       name: kube-api
       type: string
-    - description: Name of the Openshift project
+    - default: kuadrant
+      description: Name of the Openshift project
       name: project
       type: string
     - default: test
@@ -76,8 +77,6 @@ spec:
               - name: WORKSPACE
                 value: $(workspaces.shared-workspace.path)
               - name: KUADRANT_cluster__project
-                value: $(params.project)
-              - name: KUADRANT_control_plane__hub__project
                 value: $(params.project)
               - name: KUBE_USER
                 valueFrom:
