@@ -62,18 +62,24 @@ spec:
         steps:
           - args:
               - >-
-                cp /var/kuadrant-settings/settings.local.yaml
-                /opt/workdir/kuadrant-testsuite/config && oc login $(params.kube-api)
-                --username ${KUBE_USER} --password ${KUBE_PASSWORD}
-                --insecure-skip-tls-verify && (make $(params.make-target) || true)
+                cp /var/kuadrant-settings/settings.local.yaml /opt/workdir/kuadrant-testsuite/config &&
+                export OAUTH_URL=$(echo $(params.kube-api) | sed -e 's/api/oauth-openshift.apps/' -e 's/\(.*\):.*/\1/')/oauth/authorize &&
+                export TOKEN=$(curl -XPOST -kis --data response_type=token --data client_id=openshift-challenging-client -u ${KUBE_USER}:${KUBE_PASSWORD} ${OAUTH_URL} | grep "Location:" | sed 's/.*access_token=\([^&]*\).*/\1/') &&
+                kubectl config set-cluster ctx --server $(params.kube-api) --insecure-skip-tls-verify=true &&
+                kubectl config set-credentials user --token=${TOKEN} &&
+                kubectl config set-context ctx --user=user --cluster=ctx &&
+                kubectl config use-context ctx && (make $(params.make-target) || true)
             command:
               - /bin/bash
-              - '-cv'
+              - -cveo
+              - pipefail
             resources:
               limits:
                 cpu: '1'
                 memory: 1000Mi
             env:
+              - name: KUBECONFIG
+                value: /tmp/kubeconfig
               - name: WORKSPACE
                 value: $(workspaces.shared-workspace.path)
               - name: KUADRANT_cluster__project
@@ -98,7 +104,8 @@ spec:
               - make reportportal
             command:
               - /bin/bash
-              - '-cx'
+              - -cveo
+              - pipefail
             resources:
               limits:
                 cpu: '1'
