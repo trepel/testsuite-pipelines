@@ -1,0 +1,120 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: nightly-pipeline
+spec:
+  params:
+    - default: 'quay.io/kuadrant/testsuite:unstable'
+      description: Testsuite image to run tests on
+      name: testsuite-image
+      type: string
+    - description: API URL of the Openshift cluster
+      name: kube-api
+      type: string
+    - default: kuadrant
+      description: Name of the Openshift project
+      name: project
+      type: string
+    - default: all
+      description: Makefile target for tests (doesn't affect nightly pipeline, kept for compatibility)
+      name: make-target
+      type: string
+    - default: ""
+      description: Additional env for testsuite container separated with spaces (e.g. KUADRANT_CONTROL_PLANE__managedzone=gcp-mz KUADRANT_KEYCLOAK__url="https://my-sso.net")
+      name: additional-env
+      type: string
+    - default: nightly
+      description: Prefix of the launch name saved in report portal (nightly, username, manual, etc.)
+      name: launch-name
+      type: string
+    - default: nightly-testsuite
+      description: Report Portal Project to store test results (e.g. testsuite, nightly-testsuite)
+      name: rp-project
+      type: string
+  tasks:
+    - name: kubectl-login
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: kube-api
+          value: $(params.kube-api)
+      taskRef:
+        kind: Task
+        name: kubectl-login
+      workspaces:
+        - name: shared-workspace
+    - name: run-tests-kuadrant
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: kube-api
+          value: $(params.kube-api)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: kuadrant
+        - name: additional-env
+          value: $(params.additional-env)
+      runAfter:
+        - kubectl-login
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+    - name: run-tests-authorino-standalone
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: kube-api
+          value: $(params.kube-api)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: authorino-standalone
+        - name: additional-env
+          value: $(params.additional-env)
+      runAfter:
+        - run-tests-kuadrant
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+    - name: run-tests-dnstls-gcp
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: kube-api
+          value: $(params.kube-api)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: dnstls
+        - name: additional-env
+          value: "$(params.additional-env) KUADRANT_CONTROL_PLANE__managedzone=gcp-mz"
+      runAfter:
+        - run-tests-authorino-standalone
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+  finally:
+    - name: upload-results
+      params:
+        - name: launch-name
+          value: $(params.launch-name)
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: make-target
+          value: all
+        - name: rp-project
+          value: $(params.rp-project)
+      taskRef:
+        kind: Task
+        name: upload-results
+      workspaces:
+        - name: shared-workspace
+  workspaces:
+    - name: shared-workspace

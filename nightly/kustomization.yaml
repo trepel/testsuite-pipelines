@@ -5,8 +5,7 @@ commonLabels:
   deployment: kuadrant-qe-pipeline-nightly
 
 resources:
-  - triggertemplate.yaml
-  - triggerbinding.yaml
   - eventlistener.yaml
-  - trigger-kuadrant-cronjob.yaml
-  - trigger-authorino-standalone-cronjob.yaml
+  - trigger-nightly-cronjob.yaml
+  - ../tasks/
+  - pipeline.yaml

@@ -1,0 +1,54 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: run-tests
+spec:
+  params:
+    - description: Testsuite image to run tests on
+      name: testsuite-image
+      type: string
+    - description: API URL of the Openshift cluster
+      name: kube-api
+      type: string
+    - description: Name of the Openshift project
+      name: project
+      type: string
+    - description: Makefile target for tests
+      name: make-target
+      type: string
+    - description: Additional env for testsuite container separated with spaces (e.g. KUADRANT_CONTROL_PLANE__managedzone=gcp-mz KUADRANT_KEYCLOAK__url="https://my-sso.net")
+      name: additional-env
+      type: string
+  steps:
+    - args:
+        - make $(params.make-target) || true
+      command:
+        - /bin/bash
+        - -cveo
+        - pipefail
+      resources:
+        limits:
+          cpu: '1'
+          memory: 1000Mi
+      env:
+        - name: KUBECONFIG
+          value: $(workspaces.shared-workspace.path)/kubeconfig
+        - name: WORKSPACE
+          value: $(workspaces.shared-workspace.path)
+        - name: KUADRANT_cluster__project
+          value: $(params.project)
+        - name: KUBE_USER
+          valueFrom:
+            secretKeyRef:
+              key: KUBE_USER
+              name: openshift-pipelines-credentials
+        - name: KUBE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: KUBE_PASSWORD
+              name: openshift-pipelines-credentials
+      image: $(params.testsuite-image)
+      imagePullPolicy: Always
+      name: run-tests
+  workspaces:
+    - name: shared-workspace
