@@ -1,0 +1,60 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: upload-results
+spec:
+  params:
+    - description: Prefix of the launch name saved in report portal (nightly, username, manual, etc.)
+      name: launch-name
+      type: string
+    - description: Testsuite image to run tests on
+      name: testsuite-image
+      type: string
+    - description: Makefile target for tests
+      name: make-target
+      type: string
+    - description: Report Portal Project to store test results
+      name: rp-project
+      type: string
+  steps:
+    - args:
+        - make reportportal
+      command:
+        - /bin/bash
+        - -cveo
+        - pipefail
+      resources:
+        limits:
+          cpu: '250m'
+          memory: 128Mi
+      env:
+        - name: WORKSPACE
+          value: $(workspaces.shared-workspace.path)
+        - name: RP_LAUNCH_NAME
+          value: $(params.launch-name)-$(params.make-target)
+        - name: RP_PROJECT
+          value: $(params.rp-project)
+        - name: REPORTPORTAL
+          valueFrom:
+            secretKeyRef:
+              key: RP_URL
+              name: rp-credentials
+        - name: RP_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: RP_TOKEN
+              name: rp-credentials
+        - name: REQUESTS_CA_BUNDLE
+          value: /var/ca-bundle/tls-ca-bundle.pem
+      image: $(params.testsuite-image)
+      imagePullPolicy: Always
+      name: upload-results
+      volumeMounts:
+        - mountPath: /var/ca-bundle
+          name: rp-ca-bundle
+  volumes:
+    - configMap:
+        name: rp-ca-bundle
+      name: rp-ca-bundle
+  workspaces:
+    - name: shared-workspace

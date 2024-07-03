@@ -4,8 +4,10 @@ This repository contains Kuadrant testsuite pipeline objects
 
 Deployment
 ---
-* Install the `openshift-pipelines` Openshift operator on the cluster
-* Apply all pipelines and their resources `oc apply -k src/ -n ${PIPELINE_NAMESPACE}`
+1. Install the `openshift-pipelines` Openshift operator on the cluster
+2. Create required pipelines and their resources
+   * Apply main pipeline `oc apply -k main/ -n ${PIPELINE_NAMESPACE}`
+   * Apply nightly pipeline `oc apply -k nightly/ -n ${PIPELINE_NAMESPACE}`
 
 Secrets
 ---
@@ -23,10 +25,6 @@ kubectl create secret generic rp-credentials --from-literal=RP_URL="https://repo
 - ConfigMap named `rp-ca-bundle` containing the certificates trusted by the ReportPortal instance under the `tls-ca-bundle.pem` key. E.g.
 ```shell
 kubectl create cm rp-ca-bundle --from-file=tls-ca-bundle.pem=./tls-ca-bundle.pem -n ${PIPELINE_NAMESPACE}
-```
-- ConfigMap with testsuite settings under the `settings.local.yaml` key which is later can be used as a parameter for the pipeline run. E.g.
-```shell
-kubectl create cm pipeline-settings-default --from-file=settings.local.yaml=./settings.yaml -n ${PIPELINE_NAMESPACE}
 ```
 
 Pipeline execution
@@ -47,8 +45,5 @@ Pipeline execution
 Trigger nightly pipeline manually
 ---
 ```shell
-# kuadrant
-kubectl create job --from=cronjob/trigger-nightly-kuadrant trigger-nightly-kuadrant-$(date +%d.%m)-$(whoami)-manual -n ${PIPELINE_NAMESPACE}
-# authorino-standalone
-kubectl create job --from=cronjob/trigger-nightly-authorino-standalone trigger-nightly-authorino-standalone-$(date +%d.%m)-$(whoami)-manual -n ${PIPELINE_NAMESPACE}
+kubectl create job --from=cronjob/trigger-nightly-pipeline trigger-nightly-pipeline-$(date +%d.%m)-$(whoami)-manual -n ${PIPELINE_NAMESPACE}
 ```
