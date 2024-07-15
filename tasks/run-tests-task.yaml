@@ -19,6 +19,9 @@ spec:
     - description: Additional env for testsuite container separated with spaces (e.g. KUADRANT_CONTROL_PLANE__provider_secret=gcp-credentials KUADRANT_KEYCLOAK__url="https://my-sso.net")
       name: additional-env
       type: string
+    - description: Path to workspace kubeconfig (required to store multiple clusters in the workspace for multi-cluster tests)
+      name: kubeconfig-path
+      type: string
   steps:
     - args:
         - >-
@@ -33,7 +36,7 @@ spec:
           memory: 1000Mi
       env:
         - name: KUBECONFIG
-          value: $(workspaces.shared-workspace.path)/kubeconfig
+          value: $(params.kubeconfig-path)
         - name: WORKSPACE
           value: $(workspaces.shared-workspace.path)
         - name: KUADRANT_cluster__project
