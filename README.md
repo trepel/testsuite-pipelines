@@ -47,3 +47,9 @@ Trigger nightly pipeline manually
 ```shell
 kubectl create job --from=cronjob/trigger-nightly-pipeline trigger-nightly-pipeline-$(date +%d.%m)-$(whoami)-manual -n ${PIPELINE_NAMESPACE}
 ```
+
+Setup automatic cleanup of old PipelineRun's every week
+---
+```shell
+kubectl patch tektonconfig config --type=merge -p '{"spec":{"pruner":{"disabled":false,"keep":7,"resources":["pipelinerun"],"schedule":"0 0 * * 0"}}}'
+```
