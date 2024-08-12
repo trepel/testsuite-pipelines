@@ -31,6 +31,10 @@ spec:
       description: Report Portal Project to store test results (e.g. testsuite, nightly-testsuite)
       name: rp-project
       type: string
+    - default: true
+      description: Upload test results to Report Portal
+      name: upload-results
+      type: string
   tasks:
     - name: kubectl-login
       params:
@@ -64,6 +68,10 @@ spec:
         - name: shared-workspace
   finally:
     - name: upload-results
+      when:
+        - input: $(params.upload-results)
+          operator: in
+          values: ["true"]
       params:
         - name: launch-name
           value: $(params.launch-name)

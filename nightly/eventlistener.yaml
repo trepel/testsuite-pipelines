@@ -19,6 +19,8 @@ spec:
           value: nightly
         - name: rp-project
           value: nightly-testsuite
+        - name: upload-results
+          value: "true"
       template:
         spec:
           params:
@@ -28,6 +30,7 @@ spec:
             - name: additional-env
             - name: launch-name
             - name: rp-project
+            - name: upload-results
           resourcetemplates:
             - apiVersion: tekton.dev/v1beta1
               kind: PipelineRun
@@ -49,6 +52,8 @@ spec:
                     value: $(tt.params.launch-name)
                   - name: rp-project
                     value: $(tt.params.rp-project)
+                  - name: upload-results
+                    value: $(tt.params.upload-results)
                 workspaces:
                   - name: shared-workspace
                     volumeClaimTemplate:
