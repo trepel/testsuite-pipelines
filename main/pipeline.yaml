@@ -20,7 +20,7 @@ spec:
       name: make-target
       type: string
     - default: ""
-      description: Additional env for testsuite container separated with spaces (e.g. KUADRANT_CONTROL_PLANE__managedzone=gcp-mz KUADRANT_KEYCLOAK__url="https://my-sso.net")
+      description: Additional env for testsuite container separated with spaces (e.g. KUADRANT_CONTROL_PLANE__provider_secret=gcp-credentials KUADRANT_KEYCLOAK__url="https://my-sso.net")
       name: additional-env
       type: string
     - default: pipeline
