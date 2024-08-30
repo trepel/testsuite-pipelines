@@ -21,7 +21,8 @@ spec:
       type: string
   steps:
     - args:
-        - make $(params.make-target) || true
+        - >-
+          export $(params.additional-env) &> /dev/null && (make $(params.make-target) || true)
       command:
         - /bin/bash
         - -cveo
