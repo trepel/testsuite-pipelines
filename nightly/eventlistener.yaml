@@ -8,13 +8,15 @@ spec:
     - name: nightly-kuadrant-trigger
       bindings:
         - name: kube-api
-          value: https://api.kuadrant.example.io:6443
+          value: https://api.kuadrant-1.example.io:6443
         - name: project
           value: kuadrant
         - name: make-target
           value: all
         - name: additional-env
           value: ""
+        - name: kube-api-second
+          value: https://api.kuadrant-2.example.io:6443
         - name: launch-name
           value: nightly
         - name: rp-project
@@ -28,6 +30,7 @@ spec:
             - name: project
             - name: make-target
             - name: additional-env
+            - name: kube-api-second
             - name: launch-name
             - name: rp-project
             - name: upload-results
@@ -48,6 +51,8 @@ spec:
                     value: $(tt.params.make-target)
                   - name: additional-env
                     value: $(tt.params.additional-env)
+                  - name: kube-api-second
+                    value: $(tt.params.kube-api-second)
                   - name: launch-name
                     value: $(tt.params.launch-name)
                   - name: rp-project

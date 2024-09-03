@@ -59,6 +59,8 @@ spec:
           value: $(params.make-target)
         - name: additional-env
           value: $(params.additional-env)
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
       runAfter:
         - kubectl-login
       taskRef:

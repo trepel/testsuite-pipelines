@@ -23,6 +23,9 @@ spec:
       description: Additional env for testsuite container separated with spaces (e.g. KUADRANT_CONTROL_PLANE__provider_secret=gcp-credentials KUADRANT_KEYCLOAK__url="https://my-sso.net")
       name: additional-env
       type: string
+    - description: API URL of the second Openshift cluster for multi-cluster tests
+      name: kube-api-second
+      type: string
     - default: nightly
       description: Prefix of the launch name saved in report portal (nightly, username, manual, etc.)
       name: launch-name
@@ -59,6 +62,8 @@ spec:
           value: kuadrant
         - name: additional-env
           value: $(params.additional-env)
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
       runAfter:
         - kubectl-login
       taskRef:
@@ -78,8 +83,43 @@ spec:
           value: authorino-standalone
         - name: additional-env
           value: $(params.additional-env)
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
       runAfter:
         - run-tests-kuadrant
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+    - name: kubectl-login-second-cluster
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: kube-api
+          value: $(params.kube-api-second)
+      taskRef:
+        kind: Task
+        name: kubectl-login
+      workspaces:
+        - name: shared-workspace
+    - name: run-tests-multicluster
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: kube-api
+          value: $(params.kube-api)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: multicluster
+        - name: additional-env
+          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__additional_clusters="@json [{\"kubeconfig_path\": \"$(tasks.kubectl-login-second-cluster.results.kubeconfig-path)\"}]"'
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+      runAfter:
+        - kubectl-login-second-cluster
+        - run-tests-authorino-standalone
       taskRef:
         kind: Task
         name: run-tests
@@ -97,8 +137,10 @@ spec:
           value: dnstls
         - name: additional-env
           value: "$(params.additional-env) KUADRANT_CONTROL_PLANE__provider_secret=gcp-credentials"
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
       runAfter:
-        - run-tests-authorino-standalone
+        - run-tests-multicluster
       taskRef:
         kind: Task
         name: run-tests
