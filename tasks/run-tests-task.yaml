@@ -39,7 +39,7 @@ spec:
           value: $(params.kubeconfig-path)
         - name: WORKSPACE
           value: $(workspaces.shared-workspace.path)
-        - name: KUADRANT_cluster__project
+        - name: KUADRANT_SERVICE_PROTECTION__project
           value: $(params.project)
         - name: KUBE_USER
           valueFrom:

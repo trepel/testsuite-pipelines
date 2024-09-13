@@ -114,7 +114,7 @@ spec:
         - name: make-target
           value: multicluster
         - name: additional-env
-          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__additional_clusters="@json [{\"kubeconfig_path\": \"$(tasks.kubectl-login-second-cluster.results.kubeconfig-path)\"}]"'
+          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path)'
         - name: kubeconfig-path
           value: $(tasks.kubectl-login.results.kubeconfig-path)
       runAfter:
