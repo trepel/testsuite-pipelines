@@ -13,6 +13,8 @@ spec:
           value: kuadrant
         - name: make-target
           value: all
+        - name: settings-cm
+          value: pipeline-settings
         - name: additional-env
           value: ""
         - name: kube-api-second
@@ -29,6 +31,7 @@ spec:
             - name: kube-api
             - name: project
             - name: make-target
+            - name: settings-cm
             - name: additional-env
             - name: kube-api-second
             - name: launch-name
@@ -49,6 +52,8 @@ spec:
                     value: $(tt.params.project)
                   - name: make-target
                     value: $(tt.params.make-target)
+                  - name: settings-cm
+                    value: $(tt.params.settings-cm)
                   - name: additional-env
                     value: $(tt.params.additional-env)
                   - name: kube-api-second

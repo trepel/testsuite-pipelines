@@ -7,14 +7,14 @@ spec:
     - description: Testsuite image to run tests on
       name: testsuite-image
       type: string
-    - description: API URL of the Openshift cluster
-      name: kube-api
-      type: string
     - description: Name of the Openshift project
       name: project
       type: string
     - description: Makefile target for tests
       name: make-target
+      type: string
+    - description: Config Map with settings for the testsuite
+      name: settings-cm
       type: string
     - description: Additional env for testsuite container separated with spaces (e.g. KUADRANT_CONTROL_PLANE__provider_secret=gcp-credentials KUADRANT_KEYCLOAK__url="https://my-sso.net")
       name: additional-env
@@ -25,6 +25,7 @@ spec:
   steps:
     - args:
         - >-
+          cp /var/kuadrant-settings/settings.local.yaml /opt/workdir/kuadrant-testsuite/config &&
           export $(params.additional-env) &> /dev/null && (make $(params.make-target) || true)
       command:
         - /bin/bash
@@ -54,5 +55,12 @@ spec:
       image: $(params.testsuite-image)
       imagePullPolicy: Always
       name: run-tests
+      volumeMounts:
+        - mountPath: /var/kuadrant-settings
+          name: $(params.settings-cm)
+  volumes:
+    - configMap:
+        name: $(params.settings-cm)
+      name: $(params.settings-cm)
   workspaces:
     - name: shared-workspace

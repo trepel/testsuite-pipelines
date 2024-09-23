@@ -19,6 +19,10 @@ spec:
       description: Makefile target for tests
       name: make-target
       type: string
+    - default: pipeline-settings
+      description: Config Map with settings for the testsuite
+      name: settings-cm
+      type: string
     - default: ""
       description: Additional env for testsuite container separated with spaces (e.g. KUADRANT_CONTROL_PLANE__provider_secret=gcp-credentials KUADRANT_KEYCLOAK__url="https://my-sso.net")
       name: additional-env
@@ -51,12 +55,12 @@ spec:
       params:
         - name: testsuite-image
           value: $(params.testsuite-image)
-        - name: kube-api
-          value: $(params.kube-api)
         - name: project
           value: $(params.project)
         - name: make-target
           value: $(params.make-target)
+        - name: settings-cm
+          value: $(params.settings-cm)
         - name: additional-env
           value: $(params.additional-env)
         - name: kubeconfig-path
