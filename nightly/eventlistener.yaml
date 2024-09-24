@@ -42,6 +42,8 @@ spec:
               spec:
                 pipelineRef:
                   name: nightly-pipeline
+                timeouts:
+                  pipeline: 2h0m0s
                 params:
                   - name: kube-api
                     value: $(tt.params.kube-api)
