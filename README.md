@@ -26,6 +26,10 @@ kubectl create secret generic rp-credentials --from-literal=RP_URL="https://repo
 ```shell
 kubectl create cm rp-ca-bundle --from-file=tls-ca-bundle.pem=./tls-ca-bundle.pem -n ${PIPELINE_NAMESPACE}
 ```
+- ConfigMap with testsuite settings under the `settings.local.yaml` key. Just copy the default testsuite settings if you don't need anything else. E.g.
+```shell
+kubectl create cm pipeline-settings --from-file=settings.local.yaml=./settings.local.yaml -n ${PIPELINE_NAMESPACE}
+```
 
 Pipeline execution
 ---
@@ -45,7 +49,7 @@ Pipeline execution
 Trigger nightly pipeline manually
 ---
 ```shell
-kubectl create job --from=cronjob/trigger-nightly-pipeline trigger-nightly-pipeline-$(date +%d.%m)-$(whoami)-manual -n ${PIPELINE_NAMESPACE}
+kubectl create job --from=cronjob/trigger-nightly-pipeline trigger-nightly-pipeline-$(date +%d_%m)-$(whoami)-manual -n ${PIPELINE_NAMESPACE}
 ```
 
 Setup automatic cleanup of old PipelineRun's every week

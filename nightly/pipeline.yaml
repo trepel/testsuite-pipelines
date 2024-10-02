@@ -19,6 +19,10 @@ spec:
       description: Makefile target for tests (doesn't affect nightly pipeline, kept for compatibility)
       name: make-target
       type: string
+    - default: pipeline-settings
+      description: Config Map with settings for the testsuite
+      name: settings-cm
+      type: string
     - default: ""
       description: Additional env for testsuite container separated with spaces (e.g. KUADRANT_CONTROL_PLANE__provider_secret=gcp-credentials KUADRANT_KEYCLOAK__url="https://my-sso.net")
       name: additional-env
@@ -54,12 +58,12 @@ spec:
       params:
         - name: testsuite-image
           value: $(params.testsuite-image)
-        - name: kube-api
-          value: $(params.kube-api)
         - name: project
           value: $(params.project)
         - name: make-target
           value: kuadrant
+        - name: settings-cm
+          value: $(params.settings-cm)
         - name: additional-env
           value: $(params.additional-env)
         - name: kubeconfig-path
@@ -75,12 +79,12 @@ spec:
       params:
         - name: testsuite-image
           value: $(params.testsuite-image)
-        - name: kube-api
-          value: $(params.kube-api)
         - name: project
           value: $(params.project)
         - name: make-target
           value: authorino-standalone
+        - name: settings-cm
+          value: $(params.settings-cm)
         - name: additional-env
           value: $(params.additional-env)
         - name: kubeconfig-path
@@ -107,10 +111,10 @@ spec:
       params:
         - name: testsuite-image
           value: $(params.testsuite-image)
-        - name: kube-api
-          value: $(params.kube-api)
         - name: project
           value: $(params.project)
+        - name: settings-cm
+          value: $(params.settings-cm)
         - name: make-target
           value: multicluster
         - name: additional-env
@@ -129,12 +133,12 @@ spec:
       params:
         - name: testsuite-image
           value: $(params.testsuite-image)
-        - name: kube-api
-          value: $(params.kube-api)
         - name: project
           value: $(params.project)
         - name: make-target
           value: dnstls
+        - name: settings-cm
+          value: $(params.settings-cm)
         - name: additional-env
           value: "$(params.additional-env) KUADRANT_CONTROL_PLANE__provider_secret=gcp-credentials"
         - name: kubeconfig-path
