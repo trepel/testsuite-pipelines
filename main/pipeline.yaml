@@ -19,6 +19,10 @@ spec:
       description: Makefile target for tests
       name: make-target
       type: string
+    - default: ""
+      description: Pytest flags to use with Make (flags="${pytest-flags}" make kuadrant)
+      name: pytest-flags
+      type: string
     - default: pipeline-settings
       description: Config Map with settings for the testsuite
       name: settings-cm
@@ -59,6 +63,8 @@ spec:
           value: $(params.project)
         - name: make-target
           value: $(params.make-target)
+        - name: pytest-flags
+          value: $(params.pytest-flags)
         - name: settings-cm
           value: $(params.settings-cm)
         - name: additional-env

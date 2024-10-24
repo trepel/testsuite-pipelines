@@ -13,6 +13,8 @@ spec:
           value: kuadrant
         - name: make-target
           value: all
+        - name: pytest-flags
+          value: ""
         - name: settings-cm
           value: pipeline-settings
         - name: additional-env
