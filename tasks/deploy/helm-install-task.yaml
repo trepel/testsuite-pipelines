@@ -1,0 +1,83 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: helm-install
+spec:
+  params:
+    - description: Kuadrant image url
+      name: index-image
+      type: string
+    - description: Kuadrant image channel. Can be 'preview' for nightlies and 'stable' for releases
+      name: channel
+      type: string
+    - description: Istio deployment. Only these values 'sail', 'ossm', 'ossm3'
+      name: istio-provider
+      type: string
+    - description: Path to workspace kubeconfig
+      name: kubeconfig-path
+      type: string
+  steps:
+  - name: helm-install-operators
+    args:
+      - install
+      - -n=default
+      - --values=$(workspaces.shared-workspace.path)/kuadrant-helm-install/values.yaml
+      - --values=/mount/values-additional-manifests/additionalManifests.yaml
+      - --set=kuadrant.indexImage=$(params.index-image)
+      - --set=kuadrant.channel=$(params.channel)
+      - --set=istio.istioProvider=$(params.istio-provider)
+      - --set=tools.enabled=true
+      - --wait
+      - --debug
+      - kuadrant-operators
+      - $(workspaces.shared-workspace.path)/kuadrant-helm-install/operators/
+    command:
+      - helm
+    volumeMounts:
+      - mountPath: /mount/values-additional-manifests
+        name: values-additional-manifests
+    env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+    image: quay.io/rhn_support_azgabur/alpine/k8s:latest
+    imagePullPolicy: IfNotPresent
+  - name: helm-install-instances
+    args:
+      - install
+      - -n=default
+      - --values=$(workspaces.shared-workspace.path)/kuadrant-helm-install/values.yaml
+      - --values=/mount/values-additional-manifests/additionalManifests.yaml
+      - --set=kuadrant.indexImage=$(params.index-image)
+      - --set=kuadrant.channel=$(params.channel)
+      - --set=istio.istioProvider=$(params.istio-provider)
+      - --set=tools.enabled=true
+      - --wait
+      - --debug
+      - kuadrant-instances
+      - $(workspaces.shared-workspace.path)/kuadrant-helm-install/instances/
+    command:
+      - helm
+    volumeMounts:
+      - mountPath: /mount/values-additional-manifests
+        name: values-additional-manifests
+    env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+    image: quay.io/rhn_support_azgabur/alpine/k8s:latest
+    imagePullPolicy: IfNotPresent
+  - name: run-hack-sh
+    args:
+      - $(workspaces.shared-workspace.path)/kuadrant-helm-install/hack.sh
+    command:
+      - /bin/bash
+    env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+    image: quay.io/rhn_support_azgabur/alpine/k8s:latest
+    imagePullPolicy: IfNotPresent
+  volumes:
+    - secret:
+        secretName: values-additional-manifests
+      name: values-additional-manifests
+  workspaces:
+  - name: shared-workspace

@@ -1,0 +1,24 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: nightly-image-date
+spec:
+  results:
+    - name: nightly-image
+      description: Nightly image url
+  steps:
+    - args:
+      - echo "quay.io/kuadrant/kuadrant-operator-catalog:nightly-$(date +%d-%m-%Y)" | tee $(results.nightly-image.path)
+      command:
+        - /bin/sh
+        - -c
+      resources:
+        limits:
+          cpu: '250m'
+          memory: 128Mi
+      env:
+        - name: TZ
+          value: "Europe/Prague"
+      image: quay.io/jitesoft/alpine:latest
+      imagePullPolicy: Always
+      name: generate-nightly-url

@@ -1,20 +1,12 @@
 apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
-  name: kuadrant-deploy-pipeline
+  name: kuadrant-nightly-update-pipeline
 spec:
   params:
   - description: API URL of the Openshift cluster
     name: kube-api
     type: string
-  - description: Kuadrant image url
-    name: index-image
-    type: string
-    default: quay.io/kuadrant/kuadrant-operator-catalog:v0.11.0
-  - description: Kuadrant image channel. Can be 'preview' for nightlies and 'stable' for releases
-    name: channel
-    type: string
-    default: stable
   - description: Istio deployment. Only these values 'sail', 'ossm', 'ossm3'
     name: istio-provider
     type: string
@@ -39,6 +31,10 @@ spec:
     workspaces:
     - name: shared-workspace
       workspace: shared-workspace
+  - name: nightly-image-date
+    taskRef:
+      kind: Task
+      name: nightly-image-date
   - name: helm-uninstall
     params:
       - name: kubeconfig-path
@@ -52,18 +48,19 @@ spec:
     workspaces:
     - name: shared-workspace
       workspace: shared-workspace
-  - name: helm-install
+  - name: helm-install-nightly
     params:
       - name: index-image
-        value: $(params.index-image)
+        value: $(tasks.nightly-image-date.results.nightly-image)
       - name: channel
-        value: $(params.channel)
+        value: preview
       - name: istio-provider
         value: $(params.istio-provider)
       - name: kubeconfig-path
         value: $(tasks.kubectl-login.results.kubeconfig-path)
     runAfter:
     - helm-uninstall
+    - nightly-image-date
     taskRef:
       kind: Task
       name: helm-install

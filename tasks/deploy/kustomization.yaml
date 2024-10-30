@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - clone-task.yaml
+  - uninstall-task.yaml
+  - helm-install-task.yaml
+  - nightly-image.yaml

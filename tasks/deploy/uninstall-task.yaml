@@ -1,0 +1,73 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: helm-uninstall
+spec:
+  params:
+    - description: Path to workspace kubeconfig
+      name: kubeconfig-path
+      type: string
+  steps:
+    - name: uninstall-instances
+      args:
+        - uninstall
+        - -n=default
+        - --ignore-not-found
+        - --wait
+        - kuadrant-instances
+      command:
+        - helm
+      env:
+        - name: KUBECONFIG
+          value: $(params.kubeconfig-path)
+      image: quay.io/rhn_support_azgabur/alpine/k8s:latest
+      imagePullPolicy: IfNotPresent
+    - name: uninstall-operators
+      args:
+        - uninstall
+        - -n=default
+        - --ignore-not-found
+        - --wait
+        - kuadrant-operators
+      command:
+        - helm
+      env:
+        - name: KUBECONFIG
+          value: $(params.kubeconfig-path)
+      image: quay.io/rhn_support_azgabur/alpine/k8s:latest
+      imagePullPolicy: IfNotPresent
+    - name: delete-cert-manager-namespace
+      args:
+        - kubectl delete --ignore-not-found ns/cert-manager
+      command:
+        - /bin/bash
+        - -c
+      env:
+        - name: KUBECONFIG
+          value: $(params.kubeconfig-path)
+      image: quay.io/rhn_support_azgabur/alpine/k8s:latest
+      imagePullPolicy: IfNotPresent
+    - name: delete-kuadrant-crd
+      args:
+        - kubectl get crd -o name | grep "kuadrant" | xargs --no-run-if-empty kubectl delete
+      command:
+        - /bin/bash
+        - -c
+      env:
+        - name: KUBECONFIG
+          value: $(params.kubeconfig-path)
+      image: quay.io/rhn_support_azgabur/alpine/k8s:latest
+      imagePullPolicy: IfNotPresent
+    - name: delete-istio-crd
+      args:
+        - kubectl get crd -o name | grep "istio.io" | xargs --no-run-if-empty kubectl delete
+      command:
+        - /bin/bash
+        - -c
+      env:
+        - name: KUBECONFIG
+          value: $(params.kubeconfig-path)
+      image: quay.io/rhn_support_azgabur/alpine/k8s:latest
+      imagePullPolicy: IfNotPresent
+  workspaces:
+  - name: shared-workspace

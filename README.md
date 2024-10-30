@@ -8,6 +8,7 @@ Deployment
 2. Create required pipelines and their resources
    * Apply main pipeline `oc apply -k main/ -n ${PIPELINE_NAMESPACE}`
    * Apply nightly pipeline `oc apply -k nightly/ -n ${PIPELINE_NAMESPACE}`
+   * Apply helm-deploy pipelines `oc apply -k deploy/ -n ${PIPELINE_NAMESPACE}`
 
 Secrets
 ---
@@ -29,6 +30,11 @@ kubectl create cm rp-ca-bundle --from-file=tls-ca-bundle.pem=./tls-ca-bundle.pem
 - ConfigMap with testsuite settings under the `settings.local.yaml` key. Just copy the default testsuite settings if you don't need anything else. E.g.
 ```shell
 kubectl create cm pipeline-settings --from-file=settings.local.yaml=./settings.local.yaml -n ${PIPELINE_NAMESPACE}
+```
+
+- Opaque Secret named values-additional-manifests containing secrets for testsuite run. Example: https://github.com/azgabur/kuadrant-helm-install/blob/main/example-additionalManifests.yaml
+```shell
+kubectl create -n ${PIPELINE_NAMESPACE} secret generic values-additional-manifests --from-file=additionalManifests.yaml=${ADDITIONAL_MANIFESTS.yaml}
 ```
 
 Pipeline execution
