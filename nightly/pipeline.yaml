@@ -19,6 +19,10 @@ spec:
       description: Makefile target for tests (doesn't affect nightly pipeline, kept for compatibility)
       name: make-target
       type: string
+    - default: ""
+      description: Pytest flags to use with Make (flags="${pytest-flags}" make kuadrant)
+      name: pytest-flags
+      type: string
     - default: pipeline-settings
       description: Config Map with settings for the testsuite
       name: settings-cm
@@ -62,6 +66,8 @@ spec:
           value: $(params.project)
         - name: make-target
           value: kuadrant
+        - name: pytest-flags
+          value: $(params.pytest-flags)
         - name: settings-cm
           value: $(params.settings-cm)
         - name: additional-env
@@ -83,6 +89,8 @@ spec:
           value: $(params.project)
         - name: make-target
           value: authorino-standalone
+        - name: pytest-flags
+          value: $(params.pytest-flags)
         - name: settings-cm
           value: $(params.settings-cm)
         - name: additional-env
@@ -117,6 +125,8 @@ spec:
           value: $(params.settings-cm)
         - name: make-target
           value: multicluster
+        - name: pytest-flags
+          value: $(params.pytest-flags)
         - name: additional-env
           value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path)'
         - name: kubeconfig-path
@@ -137,6 +147,8 @@ spec:
           value: $(params.project)
         - name: make-target
           value: dnstls
+        - name: pytest-flags
+          value: "$(params.pytest-flags) --junitxml=$(workspaces.shared-workspace.path)/junit-dnstls-gcp.xml -o junit_suite_name=dnstls-gcp"
         - name: settings-cm
           value: $(params.settings-cm)
         - name: additional-env
@@ -145,6 +157,29 @@ spec:
           value: $(tasks.kubectl-login.results.kubeconfig-path)
       runAfter:
         - run-tests-multicluster
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+    - name: run-tests-dnstls-azure
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: dnstls
+        - name: pytest-flags
+          value: "$(params.pytest-flags) --junitxml=$(workspaces.shared-workspace.path)/junit-dnstls-azure.xml -o junit_suite_name=dnstls-azure"
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: additional-env
+          value: "$(params.additional-env) KUADRANT_CONTROL_PLANE__provider_secret=azure-credentials"
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+      runAfter:
+        - run-tests-dnstls-gcp
       taskRef:
         kind: Task
         name: run-tests

@@ -13,6 +13,9 @@ spec:
     - description: Makefile target for tests
       name: make-target
       type: string
+    - description: Pytest flags to use with Make (flags="${pytest-flags}" make kuadrant)
+      name: pytest-flags
+      type: string
     - description: Config Map with settings for the testsuite
       name: settings-cm
       type: string
@@ -26,7 +29,7 @@ spec:
     - args:
         - >-
           cp /var/kuadrant-settings/settings.local.yaml /opt/workdir/kuadrant-testsuite/config &&
-          export $(params.additional-env) &> /dev/null && (flags="-vv" make $(params.make-target) || true)
+          export $(params.additional-env) &> /dev/null && (flags="-vv $(params.pytest-flags)" make $(params.make-target) || true)
       command:
         - /bin/bash
         - -cveo
