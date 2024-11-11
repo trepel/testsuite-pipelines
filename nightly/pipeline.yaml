@@ -81,6 +81,17 @@ spec:
         name: run-tests
       workspaces:
         - name: shared-workspace
+    - name: kubectl-login-second-cluster
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: kube-api
+          value: $(params.kube-api-second)
+      taskRef:
+        kind: Task
+        name: kubectl-login
+      workspaces:
+        - name: shared-workspace
     - name: run-tests-authorino-standalone
       params:
         - name: testsuite-image
@@ -96,23 +107,12 @@ spec:
         - name: additional-env
           value: $(params.additional-env)
         - name: kubeconfig-path
-          value: $(tasks.kubectl-login.results.kubeconfig-path)
+          value: $(tasks.kubectl-login-second-cluster.results.kubeconfig-path)
       runAfter:
-        - run-tests-kuadrant
+        - kubectl-login-second-cluster
       taskRef:
         kind: Task
         name: run-tests
-      workspaces:
-        - name: shared-workspace
-    - name: kubectl-login-second-cluster
-      params:
-        - name: testsuite-image
-          value: $(params.testsuite-image)
-        - name: kube-api
-          value: $(params.kube-api-second)
-      taskRef:
-        kind: Task
-        name: kubectl-login
       workspaces:
         - name: shared-workspace
     - name: run-tests-multicluster
@@ -132,7 +132,7 @@ spec:
         - name: kubeconfig-path
           value: $(tasks.kubectl-login.results.kubeconfig-path)
       runAfter:
-        - kubectl-login-second-cluster
+        - run-tests-kuadrant
         - run-tests-authorino-standalone
       taskRef:
         kind: Task
@@ -177,9 +177,9 @@ spec:
         - name: additional-env
           value: "$(params.additional-env) KUADRANT_CONTROL_PLANE__provider_secret=azure-credentials"
         - name: kubeconfig-path
-          value: $(tasks.kubectl-login.results.kubeconfig-path)
+          value: $(tasks.kubectl-login-second-cluster.results.kubeconfig-path)
       runAfter:
-        - run-tests-dnstls-gcp
+        - run-tests-multicluster
       taskRef:
         kind: Task
         name: run-tests
