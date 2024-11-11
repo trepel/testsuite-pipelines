@@ -49,7 +49,7 @@ Pipeline execution
 Trigger nightly pipeline manually
 ---
 ```shell
-kubectl create job --from=cronjob/trigger-nightly-pipeline trigger-nightly-pipeline-$(date +%d_%m)-$(whoami)-manual -n ${PIPELINE_NAMESPACE}
+kubectl create job --from=cronjob/trigger-nightly-pipeline trigger-nightly-pipeline-$(date +%d.%m)-$(whoami)-manual -n ${PIPELINE_NAMESPACE}
 ```
 
 Setup automatic cleanup of old PipelineRun's every week
