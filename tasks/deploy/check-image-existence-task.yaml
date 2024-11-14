@@ -1,0 +1,26 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: check-image-existence
+spec:
+  params:
+    - description: Kuadrant image url
+      name: index-image
+      type: string
+  steps:
+    - args:
+        - >-
+          export TAG=$(echo "$(params.index-image)" | sed -r 's/.*:(.*)/\1/') &&
+          export REPO=$(echo "$(params.index-image)" | sed -r 's/^[^\/]*\/(.*):.*/\1/') &&
+          export RESPONSE=$(curl -sL "https://quay.io/api/v1/repository/${REPO}/tag/?specificTag=${TAG}") &&
+          echo "$RESPONSE" | grep -Fv '{"tags": [], "page": 1, "has_additional": false}'
+      command:
+        - /bin/sh
+        - -cexv
+      computeResources:
+        limits:
+          cpu: '250m'
+          memory: 128Mi
+      image: quay.io/curl/curl:latest
+      imagePullPolicy: IfNotPresent
+      name: check-image-existence

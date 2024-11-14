@@ -6,3 +6,4 @@ resources:
   - uninstall-task.yaml
   - helm-install-task.yaml
   - nightly-image.yaml
+  - check-image-existence-task.yaml

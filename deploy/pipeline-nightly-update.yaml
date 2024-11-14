@@ -19,6 +19,19 @@ spec:
     workspaces:
     - name: shared-workspace
       workspace: shared-workspace
+  - name: nightly-image-date
+    taskRef:
+      kind: Task
+      name: nightly-image-date
+  - name: check-image-existence
+    params:
+      - name: index-image
+        value: $(tasks.nightly-image-date.results.nightly-image)
+    taskRef:
+      kind: Task
+      name: check-image-existence
+    runAfter:
+      - nightly-image-date
   - name: kubectl-login
     params:
     - name: kube-api
@@ -31,10 +44,6 @@ spec:
     workspaces:
     - name: shared-workspace
       workspace: shared-workspace
-  - name: nightly-image-date
-    taskRef:
-      kind: Task
-      name: nightly-image-date
   - name: helm-uninstall
     params:
       - name: kubeconfig-path
@@ -42,13 +51,14 @@ spec:
     runAfter:
     - clone
     - kubectl-login
+    - check-image-existence
     taskRef:
       kind: Task
       name: helm-uninstall
     workspaces:
     - name: shared-workspace
       workspace: shared-workspace
-  - name: helm-install-nightly
+  - name: helm-install
     params:
       - name: index-image
         value: $(tasks.nightly-image-date.results.nightly-image)
@@ -60,7 +70,6 @@ spec:
         value: $(tasks.kubectl-login.results.kubeconfig-path)
     runAfter:
     - helm-uninstall
-    - nightly-image-date
     taskRef:
       kind: Task
       name: helm-install

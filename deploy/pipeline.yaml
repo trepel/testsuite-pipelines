@@ -27,6 +27,13 @@ spec:
     workspaces:
     - name: shared-workspace
       workspace: shared-workspace
+  - name: check-image-existence
+    params:
+      - name: index-image
+        value: $(params.index-image)
+    taskRef:
+      kind: Task
+      name: check-image-existence
   - name: kubectl-login
     params:
     - name: kube-api
@@ -46,6 +53,7 @@ spec:
     runAfter:
     - clone
     - kubectl-login
+    - check-image-existence
     taskRef:
       kind: Task
       name: helm-uninstall
