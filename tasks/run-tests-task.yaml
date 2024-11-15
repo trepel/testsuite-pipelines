@@ -1,4 +1,4 @@
-apiVersion: tekton.dev/v1beta1
+apiVersion: tekton.dev/v1
 kind: Task
 metadata:
   name: run-tests
@@ -34,7 +34,7 @@ spec:
         - /bin/bash
         - -cveo
         - pipefail
-      resources:
+      computeResources:
         limits:
           cpu: '1'
           memory: 1000Mi

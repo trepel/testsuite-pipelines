@@ -1,4 +1,4 @@
-apiVersion: tekton.dev/v1beta1
+apiVersion: tekton.dev/v1
 kind: Task
 metadata:
   name: upload-results
@@ -23,7 +23,7 @@ spec:
         - /bin/bash
         - -cveo
         - pipefail
-      resources:
+      computeResources:
         limits:
           cpu: '250m'
           memory: 128Mi
