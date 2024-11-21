@@ -1,10 +1,10 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: trigger-nightly-pipeline
+  name: kuadrant-nightly-update-cron
 spec:
   timeZone: "Europe/Prague"
-  schedule: "0 5 * * *"
+  schedule: "0 4 * * *"
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 300
   jobTemplate:
@@ -13,8 +13,8 @@ spec:
         spec:
           serviceAccountName: pipeline
           containers:
-            - name: trigger-nightly-pipeline
+            - name: kuadrant-nightly-update-trigger
               image: quay.io/curl/curl:latest
               command: ["/bin/sh", "-cx"]
-              args: ["curl -X POST --data {} el-nightly-cron-listener.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local:8080"]
+              args: ["curl -X POST --data {} el-kuadrant-nightly-update-listener.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local:8080"]
           restartPolicy: Never

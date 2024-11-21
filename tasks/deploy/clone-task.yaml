@@ -1,0 +1,26 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: clone
+spec:
+  steps:
+  - name: clone
+    args:
+      - >-
+        git
+        clone 
+        -b main 
+        --depth '1' 
+        https://github.com/azgabur/kuadrant-helm-install 
+        $(workspaces.shared-workspace.path)/kuadrant-helm-install
+    command:
+      - /bin/bash
+      - -c
+    computeResources:
+      limits:
+        cpu: 250m
+        memory: 128Mi
+    image: quay.io/rhn_support_azgabur/alpine/k8s:latest
+    imagePullPolicy: IfNotPresent
+  workspaces:
+  - name: shared-workspace

@@ -1,0 +1,42 @@
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: kuadrant-nightly-update-listener
+spec:
+  serviceAccountName: pipeline
+  triggers:
+    - name: kuadrant-nightly-update-trigger
+      bindings:
+        - name: istio-provider
+          value: ossm3
+        - name: kube-api
+          value: https://kubernetes.default
+      template:
+        spec:
+          params:
+            - name: kube-api
+            - name: istio-provider
+          resourcetemplates:
+            - apiVersion: tekton.dev/v1beta1
+              kind: PipelineRun
+              metadata:
+                generateName: nightly-update-
+              spec:
+                pipelineRef:
+                  name: kuadrant-nightly-update-pipeline
+                timeouts:
+                  pipeline: 30m0s
+                params:
+                  - name: kube-api
+                    value: $(tt.params.kube-api)
+                  - name: istio-provider
+                    value: $(tt.params.istio-provider)
+                workspaces:
+                  - name: shared-workspace
+                    volumeClaimTemplate:
+                      spec:
+                        accessModes:
+                          - ReadWriteOnce
+                        resources:
+                          requests:
+                            storage: 10Mi

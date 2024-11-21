@@ -1,0 +1,82 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: kuadrant-deploy-pipeline
+spec:
+  params:
+  - description: API URL of the Openshift cluster
+    name: kube-api
+    type: string
+  - description: Kuadrant image url
+    name: index-image
+    type: string
+    default: quay.io/kuadrant/kuadrant-operator-catalog:v0.11.0
+  - description: Kuadrant image channel. Can be 'preview' for nightlies and 'stable' for releases
+    name: channel
+    type: string
+    default: stable
+  - description: Istio deployment. Only these values 'sail', 'ossm', 'ossm3'
+    name: istio-provider
+    type: string
+    default: ossm3
+  tasks:
+  - name: clone
+    taskRef:
+      kind: Task
+      name: clone
+    workspaces:
+    - name: shared-workspace
+      workspace: shared-workspace
+  - name: check-image-existence
+    params:
+      - name: index-image
+        value: $(params.index-image)
+    taskRef:
+      kind: Task
+      name: check-image-existence
+  - name: kubectl-login
+    params:
+    - name: kube-api
+      value: $(params.kube-api)
+    - name: testsuite-image
+      value: quay.io/rhn_support_azgabur/alpine/k8s:latest
+    taskRef:
+      kind: Task
+      name: kubectl-login
+    workspaces:
+    - name: shared-workspace
+      workspace: shared-workspace
+  - name: helm-uninstall
+    params:
+      - name: kubeconfig-path
+        value: $(tasks.kubectl-login.results.kubeconfig-path)
+    runAfter:
+    - clone
+    - kubectl-login
+    - check-image-existence
+    taskRef:
+      kind: Task
+      name: helm-uninstall
+    workspaces:
+    - name: shared-workspace
+      workspace: shared-workspace
+  - name: helm-install
+    params:
+      - name: index-image
+        value: $(params.index-image)
+      - name: channel
+        value: $(params.channel)
+      - name: istio-provider
+        value: $(params.istio-provider)
+      - name: kubeconfig-path
+        value: $(tasks.kubectl-login.results.kubeconfig-path)
+    runAfter:
+    - helm-uninstall
+    taskRef:
+      kind: Task
+      name: helm-install
+    workspaces:
+    - name: shared-workspace
+      workspace: shared-workspace
+  workspaces:
+  - name: shared-workspace
