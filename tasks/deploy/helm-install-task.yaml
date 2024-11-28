@@ -16,6 +16,9 @@ spec:
     - description: Path to workspace kubeconfig
       name: kubeconfig-path
       type: string
+    - description: Kuadrant operator name. 'kuadrant-operator' or 'rhcl-operator'
+      name: operator-name
+      type: string
   steps:
   - name: helm-install-operators
     args:
@@ -25,6 +28,7 @@ spec:
       - --values=/mount/values-additional-manifests/additionalManifests.yaml
       - --set=kuadrant.indexImage=$(params.index-image)
       - --set=kuadrant.channel=$(params.channel)
+      - --set=kuadrant.operatorName=$(params.operator-name)
       - --set=istio.istioProvider=$(params.istio-provider)
       - --set=tools.enabled=true
       - --wait
@@ -49,6 +53,7 @@ spec:
       - --values=/mount/values-additional-manifests/additionalManifests.yaml
       - --set=kuadrant.indexImage=$(params.index-image)
       - --set=kuadrant.channel=$(params.channel)
+      - --set=kuadrant.operatorName=$(params.operator-name)
       - --set=istio.istioProvider=$(params.istio-provider)
       - --set=tools.enabled=true
       - --wait
