@@ -15,6 +15,10 @@ spec:
     name: channel
     type: string
     default: stable
+  - description: Kuadrant operator name. 'kuadrant-operator' or 'rhcl-operator'
+    name: operator-name
+    type: string
+    default: kuadrant-operator
   - description: Istio deployment. Only these values 'sail', 'ossm', 'ossm3'
     name: istio-provider
     type: string
@@ -68,6 +72,8 @@ spec:
         value: $(params.channel)
       - name: istio-provider
         value: $(params.istio-provider)
+      - name: operator-name
+        value: $(params.operator-name)
       - name: kubeconfig-path
         value: $(tasks.kubectl-login.results.kubeconfig-path)
     runAfter:
