@@ -1,0 +1,89 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: osd-aws-provisioning
+spec:
+  description: 'Installs ocm CLI tool, logs into specified OCM instance, and triggers cluster creation.'
+  params:
+    - name: ocm-login-credentials
+      type: string
+    - name: ocm-instance
+      type: string
+    - name: ocm-version
+      type: string
+    - name: cloud-provider-credentials
+      type: string
+    - name: create-cmd-params
+      type: string
+    - name: osd-name
+      type: string
+  steps:
+    - computeResources: {}
+      env:
+        - name: WORKSPACE
+          value: $(workspaces.shared-workspace.path)
+        - name: CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              key: CLIENT_ID
+              name: $(params.ocm-login-credentials)
+        - name: CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: CLIENT_SECRET
+              name: $(params.ocm-login-credentials)
+        - name: AWS_ACCOUNT_ID
+          valueFrom:
+            secretKeyRef:
+              key: AWS_ACCOUNT_ID
+              name: $(params.cloud-provider-credentials)
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              key: AWS_ACCESS_KEY_ID
+              name: $(params.cloud-provider-credentials)
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              key: AWS_SECRET_ACCESS_KEY
+              name: $(params.cloud-provider-credentials)
+      image: 'quay.io/rhn_support_azgabur/alpine/k8s:latest'
+      imagePullPolicy: Always
+      name: ocm-setup-and-cluster-install
+      script: |
+        #!/usr/bin/env bash
+        set -cveo pipefail
+
+        # OCM Setup
+        curl -Lso ocm https://github.com/openshift-online/ocm-cli/releases/download/$(params.ocm-version)/ocm-linux-amd64
+        chmod +x ocm
+        mv ocm /usr/local/bin
+        ocm version
+        ocm login --url $(params.ocm-instance) --client-id ${CLIENT_ID} --client-secret ${CLIENT_SECRET}
+        ocm whoami
+
+        # OSD Cluster Creation Trigger
+        ocm create cluster $(params.osd-name) $(params.create-cmd-params) --aws-access-key-id=${AWS_ACCESS_KEY_ID} --aws-secret-access-key=${AWS_SECRET_ACCESS_KEY} --aws-account-id=${AWS_ACCOUNT_ID}
+
+        # Wait for cluster to become ready
+        CLUSTER_ID=`ocm get /api/clusters_mgmt/v1/clusters --parameter search="name like '$(params.osd-name)'" | jq -r '.items[0].id'`
+        INTERVAL=60  # Check every 60 seconds
+        MAX_ATTEMPTS=60
+        echo "Waiting for cluster to become ready, active check each $INTERVAL seconds, max no. of checks is $MAX_ATTEMPTS"
+
+        for ((i=0; i<MAX_ATTEMPTS; i++)); do
+            STATE=$(ocm describe cluster $CLUSTER_ID | grep 'State' | awk '{print $2}')
+            echo "Current cluster state is $STATE"
+            if [ "$STATE" == "ready" ]; then
+                echo "Cluster $CLUSTER_ID is ready."
+                break
+            fi
+            echo "Waiting for cluster $CLUSTER_ID to become ready..."
+            sleep $INTERVAL
+        done
+
+        echo "Either cluster $CLUSTER_ID is reported to be ready now or max no. of checks has been reached"
+      timeout: 1h30m0s
+  workspaces:
+    - name: shared-workspace
+
