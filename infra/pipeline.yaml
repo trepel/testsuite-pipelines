@@ -7,47 +7,60 @@ spec:
   params:
     - default: kua-aws-credentials
       description: Name of secret that contains credentials for osdCcsAdmin
-      name: cloud-provider-credentials
+      name: aws-credentials
       type: string
     - default: kua-ocm-stage-client-credentials
       description: Name of secret that contains client ID and client secret to log into OCM org
-      name: ocm-login-credentials
+      name: ocm-credentials
       type: string
     - default: stage
       description: 'What OCM instance to use, either ''stage'' or ''prod'''
       name: ocm-instance
       type: string
-    - default: v1.0.3
-      description: 'What OCM version to use, see https://github.com/openshift-online/ocm-cli/releases'
-      name: ocm-version
-      type: string
     - default: kua-test
       description: OSD cluster name
-      name: osd-name
+      name: cluster-name
       type: string
     - default: '--provider=aws --ccs --channel-group=stable --compute-machine-type=m5.xlarge --compute-nodes=3 --enable-autoscaling=false --multi-az=false --region=us-east-1 --version=4.17.11 --machine-cidr=10.11.128.0/23 --pod-cidr=10.11.64.0/18 --service-cidr=10.11.0.0/18 --host-prefix=23'
       description: 'Flags to be used for `create cluster [:osd-name]` command. Do not provide aws-* flags here.'
       name: create-cmd-params
       type: string
   tasks:
-    - name: provision-osd-aws
+    - name: ocm-login
       params:
         - name: ocm-instance
           value: $(params.ocm-instance)
-        - name: ocm-version
-          value: $(params.ocm-version)
-        - name: ocm-login-credentials
-          value: $(params.ocm-login-credentials)
-        - name: cloud-provider-credentials
-          value: $(params.cloud-provider-credentials)
-        - name: create-cmd-params
-          value: $(params.create-cmd-params)
-        - name: osd-name
-          value: $(params.osd-name)
+        - name: ocm-credentials
+          value: $(params.ocm-credentials)
       taskRef:
         kind: Task
-        name: osd-aws-provisioning
-      timeout: 1h30m0s
+        name: ocm-login
+      workspaces:
+        - name: shared-workspace
+    - name: provision-osd-aws
+      params:
+        - name: aws-credentials
+          value: $(params.aws-credentials)
+        - name: create-cmd-params
+          value: $(params.create-cmd-params)
+        - name: cluster-name
+          value: $(params.cluster-name)
+      taskRef:
+        kind: Task
+        name: provision-osd-aws
+      runAfter:
+        - ocm-login
+      workspaces:
+        - name: shared-workspace
+    - name: wait-till-osd-is-ready
+      params:
+        - name: cluster-id
+          value: $(tasks.provision-osd-aws.results.cluster-id)
+      taskRef:
+        kind: Task
+        name: wait-till-osd-is-ready
+      runAfter:
+        - provision-osd-aws
       workspaces:
         - name: shared-workspace
   workspaces:
