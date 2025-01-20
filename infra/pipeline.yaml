@@ -13,8 +13,8 @@ spec:
       description: Name of secret that contains client ID and client secret to log into OCM org
       name: ocm-credentials
       type: string
-    - default: stage
-      description: 'What OCM instance to use, either ''stage'' or ''prod'''
+    - default: staging
+      description: 'What OCM instance to use, either ''staging'' or ''production'''
       name: ocm-instance
       type: string
     - default: kua-test
