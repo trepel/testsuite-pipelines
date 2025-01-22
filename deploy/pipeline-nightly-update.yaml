@@ -11,6 +11,10 @@ spec:
     name: istio-provider
     type: string
     default: ossm3
+  - description: Kuadrant operator name. 'kuadrant-operator' or 'rhcl-operator'
+    name: operator-name
+    type: string
+    default: kuadrant-operator
   tasks:
   - name: clone
     taskRef:
@@ -66,6 +70,8 @@ spec:
         value: preview
       - name: istio-provider
         value: $(params.istio-provider)
+      - name: operator-name
+        value: $(params.operator-name)
       - name: kubeconfig-path
         value: $(tasks.kubectl-login.results.kubeconfig-path)
     runAfter:
