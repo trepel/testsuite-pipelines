@@ -6,9 +6,10 @@ Deployment
 ---
 1. Install the `openshift-pipelines` Openshift operator on the cluster
 2. Create required pipelines and their resources
-   * Apply main pipeline `oc apply -k main/ -n ${PIPELINE_NAMESPACE}`
-   * Apply nightly pipeline `oc apply -k nightly/ -n ${PIPELINE_NAMESPACE}`
-   * Apply helm-deploy pipelines `oc apply -k deploy/ -n ${PIPELINE_NAMESPACE}`
+   * Apply main pipeline `kubectl apply -k main/ -n ${PIPELINE_NAMESPACE}`
+   * Apply nightly pipeline `kubectl apply -k nightly/ -n ${PIPELINE_NAMESPACE}`
+   * Apply helm-deploy pipelines `kubectl apply -k deploy/ -n ${PIPELINE_NAMESPACE}`
+   * Apply infrastructure pipelines `kubectl apply -k infra/ -n ${PIPELINE_NAMESPACE}`
 
 Secrets
 ---
@@ -35,6 +36,17 @@ kubectl create cm pipeline-settings --from-file=settings.local.yaml=./settings.l
 - Opaque Secret named values-additional-manifests containing secrets for testsuite run. Example: https://github.com/azgabur/kuadrant-helm-install/blob/main/example-additionalManifests.yaml
 ```shell
 kubectl create -n ${PIPELINE_NAMESPACE} secret generic values-additional-manifests --from-file=additionalManifests.yaml=${ADDITIONAL_MANIFESTS.yaml}
+```
+
+Resources required for infrastructure pipelines:
+- Opaque secret containing AWS credentials for `osdCcsAdmin` IAM user (pipelines provisioning clusters in AWS only). E.g.
+```shell
+kubectl create secret generic kua-aws-credentials --from-literal=AWS_ACCOUNT_ID="xxx" --from-literal=AWS_ACCESS_KEY_ID="xxx" --from-literal=AWS_SECRET_ACCESS_KEY="xxx" -n ${PIPELINE_NAMESPACE}
+```
+
+- Opaque secret containing HCC client credentials (pipelines provisioning clusters via HCC (OCM) only). E.g.
+```shell
+kubectl create secret generic kua-ocm-stage-client-credentials --from-literal=CLIENT_ID="xxx" --from-literal=CLIENT_SECRET="xxx" -n ${PIPELINE_NAMESPACE}
 ```
 
 Pipeline execution
