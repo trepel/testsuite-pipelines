@@ -63,5 +63,16 @@ spec:
         - provision-osd-aws
       workspaces:
         - name: shared-workspace
+    - name: get-osd-credentials
+      params:
+        - name: cluster-id
+          value: $(tasks.provision-osd-aws.results.cluster-id)
+      taskRef:
+        kind: Task
+        name: get-osd-credentials
+      runAfter:
+        - wait-till-osd-is-ready
+      workspaces:
+        - name: shared-workspace
   workspaces:
     - name: shared-workspace

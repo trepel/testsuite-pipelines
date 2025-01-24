@@ -5,3 +5,6 @@ resources:
   - ocm-login-task.yaml
   - provision-osd-aws-task.yaml
   - wait-till-osd-is-ready-task.yaml
+  - get-osd-credentials-task.yaml
+  - delete-osd-task.yaml
+  - wait-till-osd-is-deleted-task.yaml

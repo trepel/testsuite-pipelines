@@ -1,0 +1,44 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: wait-till-osd-is-deleted
+spec:
+  description: 'Wait till OSD is deleted'
+  params:
+    - name: cluster-id
+      type: string
+  steps:
+    - computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      image: 'quay.io/trepel/kuadrant-pipelines:latest'
+      imagePullPolicy: Always
+      name: wait-till-osd-is-deleted
+      script: |
+        #!/usr/bin/env bash
+        set -evo pipefail
+
+        # Use ocm.json created by ocm-login Task
+        export OCM_CONFIG=$(workspaces.shared-workspace.path)/ocm.json
+
+        # Wait for cluster to become ready
+        INTERVAL=60  # Check every 60 seconds
+        MAX_ATTEMPTS=60
+        echo "Waiting for cluster $(params.cluster-id) to be deleted, active check each $INTERVAL seconds, max no. of checks is $MAX_ATTEMPTS"
+
+        for ((i=0; i<MAX_ATTEMPTS; i++)); do
+            output=$(ocm list clusters | grep $(params.cluster-id) || true)
+            if [[ -z "${output// /}" ]]; then
+                echo "Cluster has been deleted."
+                break
+            fi
+            echo "Waiting for cluster to be deleted..."
+            sleep $INTERVAL
+        done
+
+        echo "Either cluster $(params.cluster-id) is deleted now or max no. of checks has been reached"
+      timeout: 1h30m0s
+  workspaces:
+    - name: shared-workspace
+
