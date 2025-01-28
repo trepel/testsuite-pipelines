@@ -49,6 +49,11 @@ kubectl create secret generic kua-aws-credentials --from-literal=AWS_ACCOUNT_ID=
 kubectl create secret generic kua-ocm-stage-client-credentials --from-literal=CLIENT_ID="xxx" --from-literal=CLIENT_SECRET="xxx" -n ${PIPELINE_NAMESPACE}
 ```
 
+- Opaque secret containing GCP credentials for `osd-ccs-admin` IAM user (pipelines provisioning clusters in GCP only). E.g.
+```shell
+kubectl create secret generic kua-gcp-credentials --from-file=gcp-osd-ccs-admin-sa-security-key.json -n ${PIPELINE_NAMESPACE}
+```
+
 Pipeline execution
 ---
 1. Through the OpenShift Web Console

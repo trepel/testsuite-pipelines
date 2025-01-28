@@ -8,3 +8,4 @@ resources:
   - ../tasks/infra/
   - osd-aws-pipeline.yaml
   - delete-osd-pipeline.yaml
+  - osd-gcp-pipeline.yaml
