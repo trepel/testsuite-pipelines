@@ -71,16 +71,6 @@ spec:
         value: $(params.kubeconfig-path)
     image: quay.io/rhn_support_azgabur/alpine/k8s:latest
     imagePullPolicy: IfNotPresent
-  - name: run-hack-sh
-    args:
-      - $(workspaces.shared-workspace.path)/kuadrant-helm-install/hack.sh
-    command:
-      - /bin/bash
-    env:
-      - name: KUBECONFIG
-        value: $(params.kubeconfig-path)
-    image: quay.io/rhn_support_azgabur/alpine/k8s:latest
-    imagePullPolicy: IfNotPresent
   volumes:
     - secret:
         secretName: values-additional-manifests
