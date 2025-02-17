@@ -1,0 +1,55 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: provision-osd-aws
+spec:
+  description: 'Provisions OSD on AWS'
+  params:
+    - name: aws-credentials
+      type: string
+    - name: create-cmd-flags
+      type: string
+    - name: cluster-name
+      type: string
+  results:
+    - name: cluster-id
+      description: cluster ID that OCM uses to identify the cluster
+  steps:
+    - computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      env:
+        - name: AWS_ACCOUNT_ID
+          valueFrom:
+            secretKeyRef:
+              key: AWS_ACCOUNT_ID
+              name: $(params.aws-credentials)
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              key: AWS_ACCESS_KEY_ID
+              name: $(params.aws-credentials)
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              key: AWS_SECRET_ACCESS_KEY
+              name: $(params.aws-credentials)
+      image: 'quay.io/trepel/kuadrant-pipelines:latest'
+      imagePullPolicy: Always
+      name: provision-osd-aws
+      script: |
+        #!/usr/bin/env bash
+        set -evo pipefail
+
+        # Use ocm.json created by ocm-login Task
+        export OCM_CONFIG=$(workspaces.shared-workspace.path)/ocm.json
+
+        # OSD Cluster Creation Trigger
+        ocm create cluster $(params.cluster-name) $(params.create-cmd-flags) --aws-access-key-id=${AWS_ACCESS_KEY_ID} --aws-secret-access-key=${AWS_SECRET_ACCESS_KEY} --aws-account-id=${AWS_ACCOUNT_ID}
+
+        # Include cluster ID in results
+        echo -n `ocm get /api/clusters_mgmt/v1/clusters --parameter search="name like '$(params.cluster-name)'" | jq -r '.items[0].id'` | tee $(results.cluster-id.path)
+  workspaces:
+    - name: shared-workspace
+

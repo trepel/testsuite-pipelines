@@ -1,0 +1,54 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: delete-osd
+spec:
+  description: Delete OSD cluster
+  params:
+    - default: kua-ocm-stage-client-credentials
+      description: Name of secret that contains client ID and client secret to log into OCM org
+      name: ocm-credentials
+      type: string
+    - default: staging
+      description: 'What OCM instance to use, either ''staging'' or ''production'''
+      name: ocm-instance
+      type: string
+    - description: OSD cluster ID that is to be deleted
+      name: cluster-id
+      type: string
+  tasks:
+    - name: ocm-login
+      params:
+        - name: ocm-instance
+          value: $(params.ocm-instance)
+        - name: ocm-credentials
+          value: $(params.ocm-credentials)
+      taskRef:
+        kind: Task
+        name: ocm-login
+      workspaces:
+        - name: shared-workspace
+    - name: delete-osd
+      params:
+        - name: cluster-id
+          value: $(params.cluster-id)
+      taskRef:
+        kind: Task
+        name: delete-osd
+      runAfter:
+        - ocm-login
+      workspaces:
+        - name: shared-workspace
+    - name: wait-till-osd-is-deleted
+      params:
+        - name: cluster-id
+          value: $(params.cluster-id)
+      taskRef:
+        kind: Task
+        name: wait-till-osd-is-deleted
+      runAfter:
+        - delete-osd
+      workspaces:
+        - name: shared-workspace
+  workspaces:
+    - name: shared-workspace

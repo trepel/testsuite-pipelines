@@ -1,0 +1,29 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: delete-osd
+spec:
+  description: 'Deletes OSD.'
+  params:
+    - name: cluster-id
+      description: cluster ID that OCM uses to identify the cluster
+  steps:
+    - computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      image: 'quay.io/trepel/kuadrant-pipelines:latest'
+      imagePullPolicy: Always
+      name: delete-osd
+      script: |
+        #!/usr/bin/env bash
+        set -evo pipefail
+
+        # Use ocm.json created by ocm-login Task
+        export OCM_CONFIG=$(workspaces.shared-workspace.path)/ocm.json
+
+        # OSD Cluster Deletion Trigger
+        ocm delete cluster $(params.cluster-id)
+  workspaces:
+    - name: shared-workspace
+

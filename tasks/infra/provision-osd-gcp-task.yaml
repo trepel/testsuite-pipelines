@@ -1,0 +1,51 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: provision-osd-gcp
+spec:
+  description: 'Provisions OSD on GCP'
+  params:
+    - name: gcp-credentials
+      type: string
+    - name: create-cmd-flags
+      type: string
+    - name: cluster-name
+      type: string
+  results:
+    - name: cluster-id
+      description: cluster ID that OCM uses to identify the cluster
+  steps:
+    - computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      env:
+        - name: SERVICE_ACCOUNT_FILE
+          valueFrom:
+            secretKeyRef:
+              key: gcp-osd-ccs-admin-sa-security-key.json
+              name: $(params.gcp-credentials)
+      image: 'quay.io/trepel/kuadrant-pipelines:latest'
+      imagePullPolicy: Always
+      name: provision-osd-gcp
+      script: |
+        #!/usr/bin/env bash
+        set -evo pipefail
+
+        # Use ocm.json created by ocm-login Task
+        export OCM_CONFIG=$(workspaces.shared-workspace.path)/ocm.json
+
+        # Create GCP service account file
+        echo -n "${SERVICE_ACCOUNT_FILE}" > gcp-osd-ccs-admin-sa-security-key.json
+
+        # OSD Cluster Creation Trigger
+        ocm create cluster $(params.cluster-name) $(params.create-cmd-flags) --service-account-file=gcp-osd-ccs-admin-sa-security-key.json
+
+        # Explicit removal of the file since it contains sensitive info
+        rm gcp-osd-ccs-admin-sa-security-key.json
+
+        # Include cluster ID in results
+        echo -n `ocm get /api/clusters_mgmt/v1/clusters --parameter search="name like '$(params.cluster-name)'" | jq -r '.items[0].id'` | tee $(results.cluster-id.path)
+  workspaces:
+    - name: shared-workspace
+

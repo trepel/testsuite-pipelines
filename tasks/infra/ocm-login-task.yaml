@@ -1,0 +1,40 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: ocm-login
+spec:
+  description: 'Logs into specified OCM instance'
+  params:
+    - name: ocm-credentials
+      type: string
+    - name: ocm-instance
+      type: string
+  steps:
+    - computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      env:
+        - name: CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              key: CLIENT_ID
+              name: $(params.ocm-credentials)
+        - name: CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: CLIENT_SECRET
+              name: $(params.ocm-credentials)
+      image: 'quay.io/trepel/kuadrant-pipelines:latest'
+      imagePullPolicy: Always
+      name: ocm-login
+      script: |
+        #!/usr/bin/env bash
+        set -evo pipefail
+
+        export OCM_CONFIG=$(workspaces.shared-workspace.path)/ocm.json
+        ocm login --url $(params.ocm-instance) --client-id ${CLIENT_ID} --client-secret ${CLIENT_SECRET}
+        ocm whoami
+  workspaces:
+    - name: shared-workspace
+
