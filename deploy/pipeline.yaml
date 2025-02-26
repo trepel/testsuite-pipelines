@@ -43,7 +43,7 @@ spec:
     - name: kube-api
       value: $(params.kube-api)
     - name: testsuite-image
-      value: quay.io/rhn_support_azgabur/alpine/k8s:latest
+      value: quay.io/kuadrant/testsuite-pipelines-tools:latest
     taskRef:
       kind: Task
       name: kubectl-login

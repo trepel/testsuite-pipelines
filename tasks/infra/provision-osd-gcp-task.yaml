@@ -25,7 +25,7 @@ spec:
             secretKeyRef:
               key: gcp-osd-ccs-admin-sa-security-key.json
               name: $(params.gcp-credentials)
-      image: 'quay.io/trepel/kuadrant-pipelines:latest'
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
       imagePullPolicy: Always
       name: provision-osd-gcp
       script: |
