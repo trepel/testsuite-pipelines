@@ -10,3 +10,4 @@ resources:
   - delete-osd-pipeline.yaml
   - osd-gcp-pipeline.yaml
   - rosa-pipeline.yaml
+  - delete-rosa-pipeline.yaml

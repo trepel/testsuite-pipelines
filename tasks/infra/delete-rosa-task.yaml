@@ -1,13 +1,11 @@
 apiVersion: tekton.dev/v1
 kind: Task
 metadata:
-  name: rosa-login
+  name: delete-rosa
 spec:
-  description: 'Logs into specified OCM instance via rosa cli'
+  description: 'Deletes ROSA.'
   params:
-    - name: ocm-credentials
-      type: string
-    - name: ocm-instance
+    - name: cluster-id
       type: string
     - name: aws-credentials
       type: string
@@ -19,16 +17,6 @@ spec:
           cpu: '100m'
           memory: 64Mi
       env:
-        - name: CLIENT_ID
-          valueFrom:
-            secretKeyRef:
-              key: CLIENT_ID
-              name: $(params.ocm-credentials)
-        - name: CLIENT_SECRET
-          valueFrom:
-            secretKeyRef:
-              key: CLIENT_SECRET
-              name: $(params.ocm-credentials)
         - name: AWS_ACCOUNT_ID
           valueFrom:
             secretKeyRef:
@@ -46,14 +34,16 @@ spec:
               name: $(params.aws-credentials)
       image: 'quay.io/trepel/kuadrant-pipelines:latest'
       imagePullPolicy: Always
-      name: rosa-login
+      name: delete-rosa
       script: |
         #!/usr/bin/env bash
         set -evo pipefail
 
+        # Use ocm.json created by rosa-login Task
         export OCM_CONFIG=$(workspaces.shared-workspace.path)/ocm.json
-        rosa login --url $(params.ocm-instance) --client-id ${CLIENT_ID} --client-secret ${CLIENT_SECRET} --region $(params.region)
-        rosa whoami --region $(params.region)
+
+        # ROSA Cluster Deletion Trigger
+        rosa delete cluster --cluster=$(params.cluster-id) --region $(params.region) -y
   workspaces:
     - name: shared-workspace
 
