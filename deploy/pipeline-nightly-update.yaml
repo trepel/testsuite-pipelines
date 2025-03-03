@@ -7,6 +7,10 @@ spec:
   - description: API URL of the Openshift cluster
     name: kube-api
     type: string
+  - description: Secret name with cluster credentials
+    name: cluster-credentials
+    type: string
+    default: openshift-pipelines-credentials
   - description: Istio deployment. Only these values 'sail', 'ossm', 'ossm3'
     name: istio-provider
     type: string
@@ -42,6 +46,8 @@ spec:
       value: $(params.kube-api)
     - name: testsuite-image
       value: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    - name: cluster-credentials
+      value: $(params.cluster-credentials)
     taskRef:
       kind: Task
       name: kubectl-login

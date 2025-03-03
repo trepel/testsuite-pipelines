@@ -11,6 +11,10 @@ spec:
     - description: API URL of the Openshift cluster
       name: kube-api
       type: string
+    - description: Secret name with cluster credentials
+      name: cluster-credentials
+      type: string
+      default: openshift-pipelines-credentials
     - default: kuadrant
       description: Name of the Openshift project
       name: project
@@ -50,6 +54,8 @@ spec:
           value: $(params.testsuite-image)
         - name: kube-api
           value: $(params.kube-api)
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
       taskRef:
         kind: Task
         name: kubectl-login
@@ -71,6 +77,8 @@ spec:
           value: $(params.additional-env)
         - name: kubeconfig-path
           value: $(tasks.kubectl-login.results.kubeconfig-path)
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
       runAfter:
         - kubectl-login
       taskRef:

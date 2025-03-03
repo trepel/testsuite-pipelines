@@ -10,6 +10,9 @@ spec:
     - description: API URL of the Openshift cluster
       name: kube-api
       type: string
+    - description: Secret name with cluster credentials
+      name: cluster-credentials
+      type: string
   results:
     - name: kubeconfig-path
       description: Path to new kubeconfig in the workspace
@@ -40,12 +43,12 @@ spec:
           valueFrom:
             secretKeyRef:
               key: KUBE_USER
-              name: openshift-pipelines-credentials
+              name: $(params.cluster-credentials)
         - name: KUBE_PASSWORD
           valueFrom:
             secretKeyRef:
               key: KUBE_PASSWORD
-              name: openshift-pipelines-credentials
+              name: $(params.cluster-credentials)
       image: $(params.testsuite-image)
       imagePullPolicy: Always
       name: kubectl-login

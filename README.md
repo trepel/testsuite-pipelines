@@ -14,7 +14,7 @@ Deployment
 Secrets
 ---
 Prior to the running of the pipeline, the following resources must be created in the pipeline namespace:
-- Opaque Secret named `openshift-pipelines-credentials` containing `KUBE_PASSWORD` and `KUBE_USER` keys 
+- Opaque Secret (pipelines expect `openshift-pipelines-credentials` name by default but custom name can be specified via `cluster-credentials` input parameter) containing `KUBE_PASSWORD` and `KUBE_USER` keys 
 with the credentials to access the testing cluster. E.g.
 ```shell
 kubectl create secret generic openshift-pipelines-credentials --from-literal=KUBE_USER="admin" --from-literal=KUBE_PASSWORD="admin" -n ${PIPELINE_NAMESPACE}
