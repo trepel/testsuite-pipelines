@@ -15,6 +15,7 @@ spec:
           containers:
             - name: kuadrant-nightly-update-trigger
               image: quay.io/curl/curl:latest
+              imagePullPolicy: Always
               command: ["/bin/sh", "-cx"]
               args: ["curl -X POST --data {} el-kuadrant-nightly-update-listener.$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace).svc.cluster.local:8080"]
           restartPolicy: Never

@@ -12,7 +12,7 @@ spec:
         limits:
           cpu: '100m'
           memory: 64Mi
-      image: 'quay.io/trepel/kuadrant-pipelines:latest'
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
       imagePullPolicy: Always
       name: wait-till-osd-is-deleted
       script: |

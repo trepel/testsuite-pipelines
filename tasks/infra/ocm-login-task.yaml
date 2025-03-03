@@ -25,7 +25,7 @@ spec:
             secretKeyRef:
               key: CLIENT_SECRET
               name: $(params.ocm-credentials)
-      image: 'quay.io/trepel/kuadrant-pipelines:latest'
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
       imagePullPolicy: Always
       name: ocm-login
       script: |

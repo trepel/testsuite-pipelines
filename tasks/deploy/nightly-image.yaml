@@ -19,6 +19,6 @@ spec:
       env:
         - name: TZ
           value: "Europe/Prague"
-      image: quay.io/jitesoft/alpine:latest
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
       imagePullPolicy: Always
       name: generate-nightly-url

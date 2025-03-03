@@ -43,8 +43,8 @@ spec:
     env:
       - name: KUBECONFIG
         value: $(params.kubeconfig-path)
-    image: quay.io/rhn_support_azgabur/alpine/k8s:latest
-    imagePullPolicy: IfNotPresent
+    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    imagePullPolicy: Always
   - name: helm-install-instances
     args:
       - install
@@ -69,8 +69,8 @@ spec:
     env:
       - name: KUBECONFIG
         value: $(params.kubeconfig-path)
-    image: quay.io/rhn_support_azgabur/alpine/k8s:latest
-    imagePullPolicy: IfNotPresent
+    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    imagePullPolicy: Always
   volumes:
     - secret:
         secretName: values-additional-manifests
