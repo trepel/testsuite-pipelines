@@ -1,6 +1,6 @@
 FROM quay.io/app-sre/ubi9-ubi-minimal:latest
 
-RUN microdnf -y install jq tar git buildah
+RUN microdnf -y install jq tar git buildah findutils
 
 RUN curl -LSs -o /usr/local/bin/ocm "https://github.com/openshift-online/ocm-cli/releases/download/$(curl -Lfs https://api.github.com/repos/openshift-online/ocm-cli/releases/latest \
     | jq -r .tag_name)/ocm-linux-amd64" \
