@@ -39,6 +39,10 @@ spec:
       description: Prefix of the launch name saved in report portal (nightly, username, manual, etc.)
       name: launch-name
       type: string
+    - default: ""
+      description: Optional launch description for Report Portal
+      name: launch-description
+      type: string
     - default: testsuite
       description: Report Portal Project to store test results (e.g. testsuite, nightly-testsuite)
       name: rp-project
@@ -95,12 +99,16 @@ spec:
       params:
         - name: launch-name
           value: $(params.launch-name)
+        - name: launch-description
+          value: $(params.launch-description)
         - name: testsuite-image
           value: $(params.testsuite-image)
         - name: make-target
           value: $(params.make-target)
         - name: rp-project
           value: $(params.rp-project)
+        - name: ocp-version
+          value: $(tasks.kubectl-login.results.ocp-version)
       taskRef:
         kind: Task
         name: upload-results

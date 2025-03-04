@@ -7,6 +7,9 @@ spec:
     - description: Prefix of the launch name saved in report portal (nightly, username, manual, etc.)
       name: launch-name
       type: string
+    - description: Launch description for Report Portal
+      name: launch-description
+      type: string
     - description: Testsuite image to run tests on
       name: testsuite-image
       type: string
@@ -15,6 +18,9 @@ spec:
       type: string
     - description: Report Portal Project to store test results
       name: rp-project
+      type: string
+    - description: OCP cluster version
+      name: ocp-version
       type: string
   steps:
     - args:
@@ -46,6 +52,10 @@ spec:
               name: rp-credentials
         - name: REQUESTS_CA_BUNDLE
           value: /var/ca-bundle/tls-ca-bundle.pem
+        - name: RP_LAUNCH_DESC
+          value: $(params.launch-description)
+        - name: OCP_VERSION
+          value: $(params.ocp-version)
       image: $(params.testsuite-image)
       imagePullPolicy: Always
       name: upload-results
