@@ -16,6 +16,8 @@ spec:
   results:
     - name: kubeconfig-path
       description: Path to new kubeconfig in the workspace
+    - name: ocp-version
+      description: OCP cluster version
   steps:
     - args:
         - >-
@@ -27,7 +29,9 @@ spec:
           kubectl config set-credentials user --token=${TOKEN} &&
           kubectl config set-context ctx --user=user --cluster=ctx &&
           kubectl config use-context ctx &&
-          echo -n ${KUBECONFIG} | tee $(results.kubeconfig-path.path)
+          echo -n ${KUBECONFIG} | tee $(results.kubeconfig-path.path) &&
+          export OCP_VERSION=$(kubectl get clusterversion -o jsonpath='{.items[].status.history[0].version}') &&
+          echo -n ${OCP_VERSION%.*} | tee $(results.ocp-version.path)
       command:
         - /bin/bash
         - -cveo
