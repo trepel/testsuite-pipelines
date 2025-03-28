@@ -1,0 +1,55 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: wait-for-valid-certificates
+spec:
+  description: 'Wait till console and API URLs get valid certificates'
+  params:
+    - name: console-url
+      type: string
+    - name: api-url
+      type: string
+  steps:
+    - computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      name: wait-for-valid-certificates
+      script: |
+        #!/usr/bin/env bash
+        set -ev -o pipefail
+
+        # Wait for cluster to get valid certificates
+        INTERVAL=60  # Check every 60 seconds
+        MAX_ATTEMPTS=60
+        attempts=0 # no. of active checks already done
+        echo "Waiting for cluster to get valid certificates, active check each $INTERVAL seconds, max no. of checks is $MAX_ATTEMPTS"
+
+        for ((i=0; i<MAX_ATTEMPTS; i++)); do
+            attempts+=1
+            OUTPUT=$(curl -s -o /dev/null -w "%{http_code}\n" $(params.api-url) || true)
+            # Not authenticated so 403 Forbidden is expected once valid certificates are applied
+            if [[ "$OUTPUT" == "403" ]]; then
+                echo "API URL got valid certificate."
+                break
+            fi
+            echo "Waiting for API URL to get valid certificates..."
+            sleep $INTERVAL
+        done
+
+        for ((i=0; i<(MAX_ATTEMPTS-attempts); i++)); do
+            OUTPUT=$(curl -s -o /dev/null -w "%{http_code}\n" $(params.console-url) || true)
+            if [[ "$OUTPUT" == "200" ]]; then
+                echo "Console URL got valid certificate."
+                break
+            fi
+            echo "Waiting for Console URL to get valid certificates..."
+            sleep $INTERVAL
+        done
+
+        echo "Either cluster got valid certificates or max no. of checks has been reached"
+  workspaces:
+    - name: shared-workspace
+

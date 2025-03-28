@@ -9,3 +9,4 @@ resources:
   - delete-osd-task.yaml
   - wait-till-osd-is-deleted-task.yaml
   - provision-osd-gcp-task.yaml
+  - wait-for-valid-certificates-task.yaml
