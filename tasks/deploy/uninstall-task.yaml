@@ -8,6 +8,21 @@ spec:
       name: kubeconfig-path
       type: string
   steps:
+    - name: remove-leftovers-kuadrant-ns
+      args:
+        - >-
+          for crd in $(kubectl get crd -o name | grep "kuadrant" | sed 's/.*\/\(.*\)/\1/'); do
+              kubectl get --chunk-size=0 -o name -n "kuadrant" "$crd" |\
+              xargs --no-run-if-empty -P 20 -n 1 kubectl delete --ignore-not-found -n "kuadrant"
+          done
+      command:
+        - /bin/bash
+        - -c
+      env:
+        - name: KUBECONFIG
+          value: $(params.kubeconfig-path)
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
     - name: uninstall-instances
       args:
         - uninstall
