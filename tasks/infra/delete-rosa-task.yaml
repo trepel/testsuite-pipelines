@@ -1,0 +1,73 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: delete-rosa
+spec:
+  description: 'Deletes ROSA.'
+  params:
+    - name: cluster-id
+      type: string
+    - name: aws-credentials
+      type: string
+    - name: region
+      type: string
+  steps:
+    - computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      env:
+        - name: AWS_ACCOUNT_ID
+          valueFrom:
+            secretKeyRef:
+              key: AWS_ACCOUNT_ID
+              name: $(params.aws-credentials)
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              key: AWS_ACCESS_KEY_ID
+              name: $(params.aws-credentials)
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              key: AWS_SECRET_ACCESS_KEY
+              name: $(params.aws-credentials)
+      image: 'quay.io/kuadrant/testsuite-pipelines-tools:latest'
+      imagePullPolicy: Always
+      name: delete-rosa
+      script: |
+        #!/usr/bin/env bash
+        set -evo pipefail
+
+        # Use ocm.json created by rosa-login Task
+        export OCM_CONFIG=$(workspaces.shared-workspace.path)/ocm.json
+
+        # ROSA Cluster Deletion Trigger
+        rosa delete cluster --cluster=$(params.cluster-id) --region $(params.region) -y
+
+        # To output cluster uninstallation logs
+        rosa logs uninstall -c $(params.cluster-id) --region $(params.region) --watch
+
+        # Double check the cluster removal, it might take some time to complete after log stream finishes
+        INTERVAL=60  # Check every 60 seconds
+        MAX_ATTEMPTS=30
+        echo "Waiting for cluster $(params.cluster-id) to be deleted, active check each $INTERVAL seconds, max no. of checks is $MAX_ATTEMPTS"
+
+        for ((i=0; i<MAX_ATTEMPTS; i++)); do
+            output=$(ocm list clusters | grep $(params.cluster-id) || true)
+            if [[ -z "${output// /}" ]]; then
+                echo "Cluster has been deleted."
+                break
+            fi
+            echo "Waiting for cluster to be deleted..."
+            sleep $INTERVAL
+        done
+
+        # Additional removals not covered by cluster uninstallation
+        rosa delete operator-roles -c $(params.cluster-id) --region $(params.region) --mode auto -y || true
+        rosa delete oidc-provider -c $(params.cluster-id) --region $(params.region) --mode auto -y || true
+        rosa delete account-roles --prefix ManagedOpenShift --region $(params.region) --mode auto || true
+
+  workspaces:
+    - name: shared-workspace
+

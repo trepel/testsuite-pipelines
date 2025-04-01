@@ -1,0 +1,59 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: rosa-login
+spec:
+  description: 'Logs into specified OCM instance via rosa cli'
+  params:
+    - name: ocm-credentials
+      type: string
+    - name: ocm-instance
+      type: string
+    - name: aws-credentials
+      type: string
+    - name: region
+      type: string
+  steps:
+    - computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      env:
+        - name: CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              key: CLIENT_ID
+              name: $(params.ocm-credentials)
+        - name: CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: CLIENT_SECRET
+              name: $(params.ocm-credentials)
+        - name: AWS_ACCOUNT_ID
+          valueFrom:
+            secretKeyRef:
+              key: AWS_ACCOUNT_ID
+              name: $(params.aws-credentials)
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              key: AWS_ACCESS_KEY_ID
+              name: $(params.aws-credentials)
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              key: AWS_SECRET_ACCESS_KEY
+              name: $(params.aws-credentials)
+      image: 'quay.io/kuadrant/testsuite-pipelines-tools:latest'
+      imagePullPolicy: Always
+      name: rosa-login
+      script: |
+        #!/usr/bin/env bash
+        set -evo pipefail
+
+        export OCM_CONFIG=$(workspaces.shared-workspace.path)/ocm.json
+        rosa login --url $(params.ocm-instance) --client-id ${CLIENT_ID} --client-secret ${CLIENT_SECRET} --region $(params.region)
+        rosa whoami --region $(params.region)
+  workspaces:
+    - name: shared-workspace
+
