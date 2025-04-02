@@ -54,6 +54,11 @@ kubectl create secret generic kua-ocm-stage-client-credentials --from-literal=CL
 kubectl create secret generic kua-gcp-credentials --from-file=gcp-osd-ccs-admin-sa-security-key.json -n ${PIPELINE_NAMESPACE}
 ```
 
+- Opaque secret containing ROSA credentials for an IAM user (pipelines provisioning ROSA cluster only). E.g.
+```shell
+kubectl create secret generic kua-rosa-credentials --from-literal=AWS_ACCOUNT_ID="xxx" --from-literal=AWS_ACCESS_KEY_ID="xxx" --from-literal=AWS_SECRET_ACCESS_KEY="xxx" -n ${PIPELINE_NAMESPACE}
+```
+
 Pipeline execution
 ---
 1. Through the OpenShift Web Console
@@ -80,3 +85,14 @@ Setup automatic cleanup of old PipelineRun's every week
 ```shell
 kubectl patch tektonconfig config --type=merge -p '{"spec":{"pruner":{"disabled":false,"keep":7,"resources":["pipelinerun"],"schedule":"0 0 * * 0"}}}'
 ```
+
+Pipeline image
+---
+If `Dockerfile` has been modified:
+```shel
+podman build -t quay.io/kuadrant/testsuite-pipelines-tools:latest --no-cache .
+podman push quay.io/kuadrant/testsuite-pipelines-tools:latest
+```
+
+Only members of [QE Team](https://quay.io/organization/kuadrant/teams/qe) and `kuadrant+qe` robot account are allowed to do the push.
+

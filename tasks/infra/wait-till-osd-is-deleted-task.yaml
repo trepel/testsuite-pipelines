@@ -22,7 +22,7 @@ spec:
         # Use ocm.json created by ocm-login Task
         export OCM_CONFIG=$(workspaces.shared-workspace.path)/ocm.json
 
-        # Wait for cluster to become ready
+        # Wait for cluster to be deleted
         INTERVAL=60  # Check every 60 seconds
         MAX_ATTEMPTS=60
         echo "Waiting for cluster $(params.cluster-id) to be deleted, active check each $INTERVAL seconds, max no. of checks is $MAX_ATTEMPTS"

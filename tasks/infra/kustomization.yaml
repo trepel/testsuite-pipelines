@@ -10,3 +10,7 @@ resources:
   - wait-till-osd-is-deleted-task.yaml
   - provision-osd-gcp-task.yaml
   - wait-for-valid-certificates-task.yaml
+  - rosa-login-task.yaml
+  - provision-rosa-task.yaml
+  - delete-rosa-task.yaml
+

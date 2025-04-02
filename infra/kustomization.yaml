@@ -9,3 +9,5 @@ resources:
   - osd-aws-pipeline.yaml
   - delete-osd-pipeline.yaml
   - osd-gcp-pipeline.yaml
+  - rosa-pipeline.yaml
+  - delete-rosa-pipeline.yaml
