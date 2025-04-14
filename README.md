@@ -14,6 +14,8 @@ Deployment
 Secrets
 ---
 Prior to the running of the pipeline, the following resources must be created in the pipeline namespace:
+
+### Testsuite pipelines
 - Opaque Secret (pipelines expect `openshift-pipelines-credentials` name by default but custom name can be specified via `cluster-credentials` input parameter) containing `KUBE_PASSWORD` and `KUBE_USER` keys 
 with the credentials to access the testing cluster. E.g.
 ```shell
@@ -33,12 +35,13 @@ kubectl create cm rp-ca-bundle --from-file=tls-ca-bundle.pem=./tls-ca-bundle.pem
 kubectl create cm pipeline-settings --from-file=settings.local.yaml=./settings.local.yaml -n ${PIPELINE_NAMESPACE}
 ```
 
+### Helm pipelines
 - Opaque Secret named values-additional-manifests containing secrets for testsuite run. Example: https://github.com/azgabur/kuadrant-helm-install/blob/main/example-additionalManifests.yaml
 ```shell
 kubectl create -n ${PIPELINE_NAMESPACE} secret generic values-additional-manifests --from-file=additionalManifests.yaml=${ADDITIONAL_MANIFESTS.yaml}
 ```
 
-Resources required for infrastructure pipelines:
+### Resources required for infrastructure pipelines
 - Opaque secret containing AWS credentials for `osdCcsAdmin` IAM user (pipelines provisioning clusters in AWS only). E.g.
 ```shell
 kubectl create secret generic kua-aws-credentials --from-literal=AWS_ACCOUNT_ID="xxx" --from-literal=AWS_ACCESS_KEY_ID="xxx" --from-literal=AWS_SECRET_ACCESS_KEY="xxx" -n ${PIPELINE_NAMESPACE}
@@ -74,14 +77,19 @@ Pipeline execution
     - Install the `tkn` CLI tool
     - Execute the `tkn pipeline start` command with the required parameters
 
-Trigger nightly pipeline manually
+Useful commands
 ---
+* Trigger nightly pipeline manually
 ```shell
 kubectl create job --from=cronjob/trigger-nightly-pipeline trigger-nightly-pipeline-$(date +%d.%m)-$(whoami)-manual -n ${PIPELINE_NAMESPACE}
 ```
 
-Setup automatic cleanup of old PipelineRun's every week
----
+* Set default dns configuration for Tekton pods
+```shell
+kubectl patch configmap config-defaults --type merge -p '{"data": {"default-pod-template": "dnsConfig:\n  nameservers:\n    - 1.2.3.4\n    - 5.6.7.8\ndnsPolicy: None"}}' -n openshift-pipelines
+```
+
+* Setup automatic cleanup of old PipelineRun's every week
 ```shell
 kubectl patch tektonconfig config --type=merge -p '{"spec":{"pruner":{"disabled":false,"keep":7,"resources":["pipelinerun"],"schedule":"0 0 * * 0"}}}'
 ```
