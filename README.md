@@ -86,7 +86,9 @@ kubectl create job --from=cronjob/trigger-nightly-pipeline trigger-nightly-pipel
 
 * Set default dns configuration for Tekton pods
 ```shell
-kubectl patch configmap config-defaults --type merge -p '{"data": {"default-pod-template": "dnsConfig:\n  nameservers:\n    - 1.2.3.4\n    - 5.6.7.8\ndnsPolicy: None"}}' -n openshift-pipelines
+resolver1="1.2.3.4" # Change me
+resolver2="2.3.4.5" # Change me
+kubectl patch tektonconfig config --type merge -p "{\"spec\": {\"pipeline\": {\"default-pod-template\": \"dnsConfig:\n  nameservers:\n    - ${resolver1}\n    - ${resolver2}\ndnsPolicy: None\"}}}"
 ```
 
 * Setup automatic cleanup of old PipelineRun's every week
