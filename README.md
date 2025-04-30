@@ -93,7 +93,7 @@ kubectl patch tektonconfig config --type merge -p "{\"spec\": {\"pipeline\": {\"
 
 * Setup automatic cleanup of old PipelineRun's every week
 ```shell
-kubectl patch tektonconfig config --type=merge -p '{"spec":{"pruner":{"disabled":false,"keep":7,"resources":["pipelinerun"],"schedule":"0 0 * * 0"}}}'
+kubectl patch tektonconfig config --type=merge -p '{"spec":{"pruner":{"disabled":false,"keep":null,"keep-since":10080,"resources":["pipelinerun"],"schedule":"0 0 * * 0"}}}'
 ```
 
 Pipeline image
