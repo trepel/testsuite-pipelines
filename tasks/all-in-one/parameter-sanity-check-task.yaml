@@ -1,0 +1,124 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: parameter-sanity-check
+spec:
+  description: Sanitization of input parameters
+  params:
+    - name: provision-cluster
+      type: string
+    - name: cluster-type
+      type: string
+    - name: provider-credentials
+      type: string
+    - name: kube-api
+      type: string
+    - name: cluster-credentials
+      type: string
+    - name: create-cmd-flags
+      type: string
+    - name: index-image
+      type: string
+    - name: channel
+      type: string
+    - name: operator-name
+      type: string
+  results:
+    - name: provider-credentials
+      description: Credentials for cloud provider
+    - name: create-cmd-flags
+      description: Flags for cluster creation command
+  steps:
+    - computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      name: parameter-sanity-check
+      script: |
+          #!/usr/bin/env bash
+          set -evo pipefail
+
+          # Workaround for https://github.com/tektoncd/pipeline/issues/7680
+          # It is not possible to have the whole sequence of Tasks depending on each other
+          # skipped and the continue with the rest of the Tasks so for now this pipeline
+          # only work if cluster is provisioned as part of its run
+          if [[ "$(params.provision-cluster)" != "true" ]]; then
+            echo "You need to provision a new cluster as part of PipelineRun due to https://github.com/tektoncd/pipeline/issues/7680"
+            exit 1
+          fi
+          # End of workaround
+
+          if [[ "$(params.provision-cluster)" == "true" ]]; then
+            # make sure that there is no cluster info if a new cluster is to be provisioned
+            if [[ "x$(params.kube-api)" != "x" ]]; then
+              echo "'cluster-provision' parameter is set to 'true', the 'kube-api' parameter must be left blank"
+              exit 1
+            fi
+            if [[ "x$(params.cluster-credentials)" != "x" ]]; then
+              echo "'cluster-provision' parameter is set to 'true', the 'cluster-credentials' parameter must be left blank"
+              exit 1
+            fi
+            # make sure proper defaults are used if provider credentials are not specified
+            if [[ "x$(params.provider-credentials)" == "x" ]]; then
+              if [[ "$(params.cluster-type)" == "osd-aws" ]]; then
+                echo -n 'kua-aws-credentials' | tee $(results.provider-credentials.path) && echo ""
+              fi
+              if [[ "$(params.cluster-type)" == "osd-gcp" ]]; then
+                echo -n 'kua-gcp-credentials' | tee $(results.provider-credentials.path) && echo ""
+              fi
+              if [[ "$(params.cluster-type)" == "rosa" ]]; then
+                echo -n 'kua-rosa-credentials' | tee $(results.provider-credentials.path) && echo ""
+              fi
+            else
+              echo -n "$(params.provider-credentials)" | tee $(results.provider-credentials.path) && echo ""
+            fi
+          else
+            # check that cluster info is provided if not provisioning the cluster
+            if [[ "x$(params.kube-api)" == "x" ]]; then
+              echo "'cluster-provision' parameter is not set to 'true', the 'kube-api' parameter must not be left blank"
+              exit 1
+            fi
+            if [[ "x$(params.cluster-credentials)" == "x" ]]; then
+              echo "'cluster-provision' parameter is not set to 'true', the 'cluster-credentials' parameter must not be left blank"
+              exit 1
+            fi
+          fi
+
+          # make sure default flags are used for cluster creation command if these are not specified
+          if [[ "x$(params.create-cmd-flags)" == "x" ]]; then
+            if [[ "$(params.cluster-type)" == "osd-aws" ]]; then
+              cmd_flags='--provider=aws --ccs --channel-group=stable --compute-machine-type=m5.xlarge --compute-nodes=3 --enable-autoscaling=false --multi-az=false --region=us-east-1 --version=4.18.10 --machine-cidr=10.11.128.0/23 --pod-cidr=10.11.64.0/18 --service-cidr=10.11.0.0/18 --host-prefix=23'
+              echo -n $cmd_flags | tee $(results.create-cmd-flags.path) && echo ""
+            fi
+            if [[ "$(params.cluster-type)" == "osd-gcp" ]]; then
+              cmd_flags='--provider=gcp --ccs --channel-group=stable --compute-machine-type=n2-standard-4 --compute-nodes=3 --enable-autoscaling=false --multi-az=false --region=us-east1 --version=4.17.18 --machine-cidr=10.0.0.0/16 --pod-cidr=10.128.0.0/14 --service-cidr=172.36.0.0/16 --host-prefix=23'
+              echo -n $cmd_flags | tee $(results.create-cmd-flags.path) && echo ""
+            fi
+            if [[ "$(params.cluster-type)" == "rosa" ]]; then
+              cmd_flags='--compute-machine-type m5.xlarge --replicas 3 --non-sts --use-local-credentials -y'
+              echo -n $cmd_flags | tee $(results.create-cmd-flags.path) && echo ""
+            fi
+          else
+            echo -n "$(params.create-cmd-flags)" | tee $(results.create-cmd-flags.path) && echo ""
+          fi
+
+          # check that kuadrant/RHCL installation parameters make sense
+          if [[ "x$(params.index-image)" == "x" ]]; then
+            if [[ "$(params.channel)" != "stable" ]]; then
+              echo "The 'index-image' parameter is left blank meaning that RHCL is to be installed so 'channel' parameter must be set to 'stable'"
+              exit 1
+            fi
+            if [[ "$(params.operator-name)" != "rhcl-operator" ]]; then
+              echo "The 'index-image' parameter is left blank meaning that RHCL is to be installed so 'operator-name' parameter must be set to 'rhcl-operator'"
+              exit 1
+            fi
+          else
+            if [[ "$(params.operator-name)" != "kuadrant-operator" ]]; then
+              echo "The 'index-image' parameter is not left blank meaning that Kuadrant is to be installed so 'operator-name' parameter must be set to 'kuadrant-operator'"
+              exit 1
+            fi
+          fi
+  workspaces:
+    - name: shared-workspace

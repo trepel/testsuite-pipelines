@@ -19,6 +19,10 @@ spec:
     - description: Kuadrant operator name. 'kuadrant-operator' or 'rhcl-operator'
       name: operator-name
       type: string
+    - description: true or false. If set to true testsuite-dependencies will also be installed
+      name: testsuite-dependencies
+      type: string
+      default: true
   steps:
   - name: helm-install-operators
     args:
@@ -30,7 +34,7 @@ spec:
       - --set=kuadrant.channel=$(params.channel)
       - --set=kuadrant.operatorName=$(params.operator-name)
       - --set=istio.istioProvider=$(params.istio-provider)
-      - --set=tools.enabled=true
+      - --set=tools.enabled=$(params.testsuite-dependencies)
       - --wait
       - --debug
       - kuadrant-operators
@@ -55,7 +59,7 @@ spec:
       - --set=kuadrant.channel=$(params.channel)
       - --set=kuadrant.operatorName=$(params.operator-name)
       - --set=istio.istioProvider=$(params.istio-provider)
-      - --set=tools.enabled=true
+      - --set=tools.enabled=$(params.testsuite-dependencies)
       - --timeout=10m0s
       - --wait
       - --debug

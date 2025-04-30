@@ -6,4 +6,8 @@ commonLabels:
 
 resources:
   - ../tasks/
+  - ../tasks/deploy/
+  - ../tasks/infra/
+  - ../tasks/all-in-one/
   - pipeline.yaml
+  - all-in-one-pipeline.yaml

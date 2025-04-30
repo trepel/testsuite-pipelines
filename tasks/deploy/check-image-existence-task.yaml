@@ -24,3 +24,5 @@ spec:
       image: quay.io/kuadrant/testsuite-pipelines-tools:latest
       imagePullPolicy: Always
       name: check-image-existence
+  workspaces:
+    - name: shared-workspace
