@@ -10,8 +10,14 @@ spec:
     - description: Kuadrant image channel. Can be 'preview' for nightlies and 'stable' for releases
       name: channel
       type: string
-    - description: Istio deployment. Only these values 'sail', 'ossm', 'ossm3'
+    - description: A 'ossm3' for Openshift Service mesh v3, 'ocp' for installing on Openshift 4.19+
       name: istio-provider
+      type: string
+    - description: GatewayAPI CRD version. Leave empty if installing on ocp4.19+
+      name: gateway-crd
+      type: string
+    - description: Keycloak subscription channel
+      name: keycloak-channel
       type: string
     - description: Path to workspace kubeconfig
       name: kubeconfig-path
@@ -30,6 +36,8 @@ spec:
       - --set=kuadrant.channel=$(params.channel)
       - --set=kuadrant.operatorName=$(params.operator-name)
       - --set=istio.istioProvider=$(params.istio-provider)
+      - --set=gatewayAPI.version=$(params.gateway-crd)
+      - --set=tools.keycloak.operator.channel=$(params.keycloak-channel)
       - --set=tools.enabled=true
       - --wait
       - --debug
@@ -55,6 +63,8 @@ spec:
       - --set=kuadrant.channel=$(params.channel)
       - --set=kuadrant.operatorName=$(params.operator-name)
       - --set=istio.istioProvider=$(params.istio-provider)
+      - --set=gatewayAPI.version=$(params.gateway-crd)
+      - --set=tools.keycloak.operator.channel=$(params.keycloak-channel)
       - --set=tools.enabled=true
       - --timeout=10m0s
       - --wait
