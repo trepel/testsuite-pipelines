@@ -1,0 +1,88 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: compose-config-file
+spec:
+  description: 'Compose config file for rapiDAST scan'
+  params:
+    - name: kube-api
+      type: string
+    - name: api-url-path
+      type: string
+    - name: scan-name
+      type: string
+    - name: cluster-api-token
+      type: string
+  steps:
+    - computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      name: compose-config-file
+      script: |
+        #!/usr/bin/env bash
+        set -vo pipefail
+
+        # Store rapiDAST configuration template into CONFIG_TEMPLATE variable
+        read -r -d '' CONFIG_TEMPLATE <<'EOF'
+        config:
+            # WARNING: `configVersion` indicates the schema version of the config file.
+            # This value tells RapiDAST what schema should be used to read this configuration.
+            # Therefore you should only change it if you update the configuration to a newer schema
+            # It is intended to keep backward compatibility (newer RapiDAST running an older config)
+         
+            configVersion: 4
+         
+        # `application` contains data related to the application, not to the scans.
+        application:
+          shortName: "{{NAME}}"
+          url: "{{KUBE_API}}"  # to be replaced with your cluster API server URL
+         
+        general:
+            authentication:
+                type: "http_header"
+                parameters:
+                    name: "Authorization"
+                    value: "Bearer {{TOKEN}}"
+            container:
+                # currently supported: `podman` and `none`
+                type: "none"
+         
+        scanners:
+            zap:
+            # define a scan through the ZAP scanner
+                apiScan:
+                    apis:
+                        apiUrl: "{{KUBE_API}}/{{API_URL_PATH}}"   # to be replaced with your API group information
+         
+                passiveScan:
+                    # optional list of passive rules to disable
+                    disabledRules: "2,10015,10027,10096,10024,10054"
+         
+        #   Remove comment symbols to enable activeScan once it is made sure that scanning with 'passiveScan' runs successfully. 
+        #        activeScan:
+        #            # If no policy is chosen, a default ("API-scan-minimal") will be selected
+        #            policy: "Kubernetes-API-scan"
+         
+                miscOptions:
+                  # enableUI (default: false), requires a compatible runtime (e.g.: flatpak or no containment)
+                  enableUI: False
+         
+                  # Defaults to True, set False to prevent auto update of ZAP plugins
+                  updateAddons: False
+        EOF
+
+        # Replace placeholders
+        config=$(echo "$CONFIG_TEMPLATE" \
+          | sed "s|{{NAME}}|$(params.scan-name)|g" \
+          | sed "s|{{KUBE_API}}|$(params.kube-api)|g" \
+          | sed "s|{{API_URL_PATH}}|$(params.api-url-path)|g" \
+          | sed "s|{{TOKEN}}|$(params.cluster-api-token)|g")
+
+        # Store the config.yaml for rapiDAST to shared workspace
+        echo "$config" > $(workspaces.shared-workspace.path)/config.yaml
+  workspaces:
+    - name: shared-workspace
+
