@@ -11,7 +11,7 @@ spec:
     name: cluster-credentials
     type: string
     default: openshift-pipelines-credentials
-  - description: Istio deployment. Only these values 'sail', 'ossm', 'ossm3'
+  - description: A 'ossm3' for Openshift Service mesh v3, 'ocp' for installing on Openshift 4.19+
     name: istio-provider
     type: string
     default: ossm3
@@ -19,6 +19,14 @@ spec:
     name: operator-name
     type: string
     default: kuadrant-operator
+  - description: GatewayAPI CRD version. v1.0.0, v1.1.0, v1.2.1, v1.3.0 available; Leave empty if installing on ocp4.19+
+    name: gateway-crd
+    type: string
+    default: v1.2.1
+  - description: Keycloak subscription channel
+    name: keycloak-channel
+    type: string
+    default: stable-v26
   tasks:
   - name: clone
     taskRef:
@@ -76,6 +84,10 @@ spec:
         value: preview
       - name: istio-provider
         value: $(params.istio-provider)
+      - name: gateway-crd
+        value: $(params.gateway-crd)
+      - name: keycloak-channel
+        value: $(params.keycloak-channel)
       - name: operator-name
         value: $(params.operator-name)
       - name: kubeconfig-path
