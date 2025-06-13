@@ -1,0 +1,60 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: dast-pipeline
+spec:
+  params:
+    - description: URL of Kubernetes API
+      name: kube-api
+      type: string
+    - description: Name of the rapiDAST scan
+      name: scan-name
+      type: string
+      default: rhcl-v1
+    - description: Subfolder path relative to rhcl folder in rapiDAST Central Storage (incl. leading slash)
+      name: subfolder-path
+      type: string
+    - description: Token for Kubernetes API
+      name: cluster-api-token
+      type: string
+    - description: rapiDAST version - see releases in github.com/RedHatProductSecurity/rapidast
+      name: rapidast-version
+      type: string
+      default: 2.11.0
+  tasks:
+    - name: clone-rapidast-repo
+      params:
+        - name: rapidast-version
+          value: $(params.rapidast-version)
+      taskRef:
+        kind: Task
+        name: clone-rapidast-repo
+      workspaces:
+        - name: shared-workspace
+    - name: compose-config-file
+      params:
+        - name: kube-api
+          value: $(params.kube-api)
+        - name: scan-name
+          value: $(params.scan-name)
+        - name: cluster-api-token
+          value: $(params.cluster-api-token)
+        - name: subfolder-path
+          value: $(params.subfolder-path)
+      taskRef:
+        kind: Task
+        name: compose-config-file
+      runAfter:
+        - clone-rapidast-repo
+      workspaces:
+        - name: shared-workspace
+    - name: rapidast-scan
+      taskRef:
+        kind: Task
+        name: rapidast-scan
+      runAfter:
+        - compose-config-file
+      workspaces:
+        - name: shared-workspace
+  workspaces:
+    - name: shared-workspace

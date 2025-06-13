@@ -1,0 +1,30 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: clone-rapidast-repo
+spec:
+  description: 'Clones given rapiDAST version'
+  params:
+    - name: rapidast-version
+      type: string
+  steps:
+  - name: clone-rapidast-repo
+    args:
+      - >-
+        git
+        clone 
+        -b $(params.rapidast-version)
+        --depth '1' 
+        https://github.com/RedHatProductSecurity/rapidast.git
+        $(workspaces.shared-workspace.path)/rapidast
+    command:
+      - /bin/bash
+      - -c
+    computeResources:
+      limits:
+        cpu: 250m
+        memory: 128Mi
+    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    imagePullPolicy: Always
+  workspaces:
+  - name: shared-workspace
