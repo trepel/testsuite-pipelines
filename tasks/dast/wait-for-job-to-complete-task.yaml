@@ -1,0 +1,51 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: wait-for-job-to-complete
+spec:
+  description: 'Wait for given Job to complete'
+  params:
+    - name: job-name
+      type: string
+  steps:
+    - name: wait-for-job-to-complete
+      computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      script: |
+        #!/bin/sh
+        set -euvo pipefail
+
+        JOB_NAME="$(params.job-name)"
+        MAX_TRIES=24 # max 2 minutes
+        TRY=0
+
+        echo "Waiting for Job '$JOB_NAME' in namespace '$NAMESPACE' to complete..."
+
+        while [ "$TRY" -lt "$MAX_TRIES" ]; do
+          status=$(kubectl get job "$JOB_NAME" -n "$NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}' || true)
+
+          if [ "$status" = "True" ]; then
+            echo "Job completed!"
+            break
+          fi
+
+          failed=$(kubectl get job "$JOB_NAME" -n "$NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}' || true)
+          if [ "$failed" = "True" ]; then
+            echo "Job failed!"
+            exit 1
+          fi
+
+          TRY=$((TRY + 1))
+          echo "Job not finished yet... waiting 5s"
+          sleep 5
+        done
+

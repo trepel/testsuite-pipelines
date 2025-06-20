@@ -18,24 +18,27 @@ spec:
       description: Path to new kubeconfig in the workspace
     - name: ocp-version
       description: OCP cluster version
+    - name: token
+      description: OCP Token
   steps:
-    - args:
-        - >-
-          export CLUSTER_NAME=$(echo $(params.kube-api) | sed 's/.*api\.\([^\.]*\).*/\1/') &&
-          export KUBECONFIG=$(workspaces.shared-workspace.path)/${CLUSTER_NAME} &&
-          export OAUTH_URL=$(echo $(params.kube-api) | sed -e 's/api/oauth-openshift.apps/' -e 's/\(.*\):.*/\1/')/oauth/authorize &&
-          export TOKEN=$(curl -XPOST -kis --data response_type=token --data client_id=openshift-challenging-client -u ${KUBE_USER}:${KUBE_PASSWORD} ${OAUTH_URL} | grep "Location:" | sed 's/.*access_token=\([^&]*\).*/\1/') &&
-          kubectl config set-cluster ctx --server $(params.kube-api) --insecure-skip-tls-verify=true &&
-          kubectl config set-credentials user --token=${TOKEN} &&
-          kubectl config set-context ctx --user=user --cluster=ctx &&
-          kubectl config use-context ctx &&
-          echo -n ${KUBECONFIG} | tee $(results.kubeconfig-path.path) &&
-          export OCP_VERSION=$(kubectl get clusterversion -o jsonpath='{.items[].status.history[0].version}') &&
-          echo -n ${OCP_VERSION%.*} | tee $(results.ocp-version.path)
-      command:
-        - /bin/bash
-        - -cveo
-        - pipefail
+    - script: |
+        #!/usr/bin/env bash
+        set -vo pipefail
+
+        export CLUSTER_NAME=$(echo $(params.kube-api) | sed 's/.*api\.\([^\.]*\).*/\1/')
+        export KUBECONFIG=$(workspaces.shared-workspace.path)/${CLUSTER_NAME}
+        export OAUTH_URL=$(echo $(params.kube-api) | sed -e 's/api/oauth-openshift.apps/' -e 's/\(.*\):.*/\1/')/oauth/authorize
+        export TOKEN=$(curl -XPOST -kis --data response_type=token --data client_id=openshift-challenging-client -u ${KUBE_USER}:${KUBE_PASSWORD} ${OAUTH_URL} | grep "Location:" | sed 's/.*access_token=\([^&]*\).*/\1/')
+        echo -n ${TOKEN} | tee $(results.token.path)
+
+        kubectl config set-cluster ctx --server $(params.kube-api) --insecure-skip-tls-verify=true
+        kubectl config set-credentials user --token=${TOKEN}
+        kubectl config set-context ctx --user=user --cluster=ctx
+        kubectl config use-context ctx
+
+        echo -n ${KUBECONFIG} | tee $(results.kubeconfig-path.path)
+        export OCP_VERSION=$(kubectl get clusterversion -o jsonpath='{.items[].status.history[0].version}')
+        echo -n ${OCP_VERSION%.*} | tee $(results.ocp-version.path)
       computeResources:
         limits:
           cpu: '250m'

@@ -10,6 +10,7 @@ Deployment
    * Apply nightly pipeline `kubectl apply -k nightly/ -n ${PIPELINE_NAMESPACE}`
    * Apply helm-deploy pipelines `kubectl apply -k deploy/ -n ${PIPELINE_NAMESPACE}`
    * Apply infrastructure pipelines `kubectl apply -k infra/ -n ${PIPELINE_NAMESPACE}`
+   * Apply rapiDAST pipeline `kubectl apply -k dast/ -n ${PIPELINE_NAMESPACE}`
 
 Secrets
 ---
@@ -60,6 +61,12 @@ kubectl create secret generic kua-gcp-credentials --from-file=gcp-osd-ccs-admin-
 - Opaque secret containing ROSA credentials for an IAM user (pipelines provisioning ROSA cluster only). E.g.
 ```shell
 kubectl create secret generic kua-rosa-credentials --from-literal=AWS_ACCOUNT_ID="xxx" --from-literal=AWS_ACCESS_KEY_ID="xxx" --from-literal=AWS_SECRET_ACCESS_KEY="xxx" -n ${PIPELINE_NAMESPACE}
+```
+
+### Resources required for rapiDAST pipeline
+- Opaque secret containing credentials for Google Cloud storage where rapiDAST scan results will be stored. E.g.
+```shell
+kubectl create secret generic rapidast-storage-access-key --from-file=rapidast-sa-rhcl_key.json=/local/path/to/your-service-account_key.json -n ${PIPELINE_NAMESPACE}
 ```
 
 Pipeline execution
