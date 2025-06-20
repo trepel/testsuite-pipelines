@@ -1,0 +1,24 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: rapidast-scan
+spec:
+  description: 'rapiDAST scan'
+  workspaces:
+    - name: shared-workspace
+  steps:
+    - computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      name: rapidast-scan
+      script: |
+        #!/usr/bin/env bash
+        set -evo pipefail
+
+        helm uninstall rapidast || true
+
+        helm install rapidast $(workspaces.shared-workspace.path)/rapidast/helm/chart/ --set-file rapidastConfig=$(workspaces.shared-workspace.path)/rapidast-config.yaml --set pvc=$(workspaces.shared-workspace.claim)
+

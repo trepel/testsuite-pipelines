@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - clone-rapidast-repo-task.yaml
+  - compose-config-file-task.yaml
+  - rapidast-scan-task.yaml
+  - rapidast-cleanup-task.yaml
+  - wait-for-job-to-complete-task.yaml

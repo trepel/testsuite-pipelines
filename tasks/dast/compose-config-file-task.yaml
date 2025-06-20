@@ -1,0 +1,96 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: compose-config-file
+spec:
+  description: 'Compose config file for rapiDAST scan'
+  params:
+    - name: kube-api
+      type: string
+    - name: subfolder-path
+      type: string
+    - name: cluster-api-token
+      type: string
+  workspaces:
+    - name: shared-workspace
+  volumes: 
+    - secret: 
+        secretName: rapidast-storage-access-key
+      name: rapidast-storage-access-key
+  steps:
+    - computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      name: compose-config-file
+      volumeMounts:
+        - name: rapidast-storage-access-key
+          mountPath: /rapidast-storage-access-key
+      script: |
+        #!/usr/bin/env bash
+        set -vo pipefail
+
+        cp /rapidast-storage-access-key/rapidast-sa-rhcl_key.json $(workspaces.shared-workspace.path)/rapidast-sa-rhcl_key.json
+
+        # Read rapiDAST configuration from heredoc
+        read -r -d '' config <<EOF
+        config:
+            configVersion: 4
+            googleCloudStorage:
+                keyFile: "/opt/rapidast/results/rapidast-sa-rhcl_key.json"
+                bucketName: "secaut-bucket"
+                directory: "rhcl/$(params.subfolder-path)"
+        application:
+            shortName: "rhcl-scan"
+            url: "$(params.kube-api)"
+        general:
+            authentication:
+                type: "http_header"
+                parameters:
+                    name: "Authorization"
+                    value: "Bearer $(params.cluster-api-token)"
+            container:
+                type: "none"
+        scanners:
+            zap:
+                apiScan:
+                    apis:
+                        apiUrl: "$(params.kube-api)/openapi/v3/apis/kuadrant.io/v1"
+                passiveScan:
+                    disabledRules: "2,10015,10027,10096,10024,10054"
+                miscOptions:
+                    enableUI: False
+                    updateAddons: False
+            zap_1:
+                apiScan:
+                    apis:
+                        apiUrl: "$(params.kube-api)/openapi/v3/apis/limitador.kuadrant.io/v1alpha1"
+                passiveScan:
+                    disabledRules: "2,10015,10027,10096,10024,10054"
+                miscOptions:
+                    enableUI: False
+                    updateAddons: False
+            zap_2:
+                apiScan:
+                    apis:
+                        apiUrl: "$(params.kube-api)/openapi/v3/apis/authorino.kuadrant.io/v1beta3"
+                passiveScan:
+                    disabledRules: "2,10015,10027,10096,10024,10054"
+                miscOptions:
+                    enableUI: False
+                    updateAddons: False
+            zap_3:
+                apiScan:
+                    apis:
+                        apiUrl: "$(params.kube-api)/openapi/v3/apis/operator.authorino.kuadrant.io/v1beta1"
+                passiveScan:
+                    disabledRules: "2,10015,10027,10096,10024,10054"
+                miscOptions:
+                    enableUI: False
+                    updateAddons: False
+        EOF
+
+        # Store the rapidast-config.yaml for rapiDAST to shared workspace
+        echo "$config" > $(workspaces.shared-workspace.path)/rapidast-config.yaml

@@ -1,0 +1,29 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: rapidast-cleanup
+spec:
+  description: 'rapiDAST cleanup'
+  workspaces:
+    - name: shared-workspace
+  steps:
+    - computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      name: rapidast-cleanup
+      script: |
+        #!/usr/bin/env bash
+        set -euvo pipefail
+
+        helm uninstall rapidast || true
+
+        kubectl delete pvc rapidast-pvc -n "$NAMESPACE" --ignore-not-found
+
