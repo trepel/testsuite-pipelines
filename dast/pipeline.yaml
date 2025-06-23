@@ -2,6 +2,8 @@ apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
   name: dast-pipeline
+  annotations:
+    pipelinesascode.tekton.dev/coschedule: workspaces
 spec:
   params:
     - description: URL of Kubernetes API
