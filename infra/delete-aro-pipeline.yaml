@@ -1,0 +1,25 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: delete-aro
+spec:
+  description: Delete ARO cluster
+  params:
+    - default: kua-azure-credentials
+      description: Name of secret that contains credentials for Azure Service Principal
+      name: azure-credentials
+      type: string
+    - default: kua-aro
+      description: ARO cluster name
+      name: cluster-name
+      type: string
+  tasks:
+    - name: delete-aro
+      params:
+        - name: cluster-name
+          value: $(params.cluster-name)
+        - name: azure-credentials
+          value: $(params.azure-credentials)
+      taskRef:
+        kind: Task
+        name: delete-aro

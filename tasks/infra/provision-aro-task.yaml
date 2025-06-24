@@ -1,0 +1,116 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: provision-aro
+spec:
+  description: 'Provisions ARO (OCP on Azure)'
+  params:
+    - name: azure-credentials
+      type: string
+    - name: create-cmd-flags
+      type: string
+    - name: cluster-name
+      type: string
+    - name: aro-pull-secret
+      type: string
+    - name: location
+      type: string
+  results:
+    - name: cluster-id
+      description: cluster ID that Azure Portal uses to identify the cluster
+    - name: password
+      description: kubeadmin password
+    - name: api-url
+      description: API URL of the cluster
+    - name: console-url
+      description: console URL of the cluster
+    - name: kubeadmin-console-url
+      description: console URL of the cluster for kubeadmin user
+    - name: login-command
+      description: full login command
+    - name: cluster-info
+      description: ARO Cluster Information
+  steps:
+    - computeResources:
+        limits:
+          cpu: '150m'
+          memory: 400Mi
+      env:
+        - name: APP_ID
+          valueFrom:
+            secretKeyRef:
+              key: APP_ID
+              name: $(params.azure-credentials)
+        - name: PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: PASSWORD
+              name: $(params.azure-credentials)
+        - name: TENANT_ID
+          valueFrom:
+            secretKeyRef:
+              key: TENANT_ID
+              name: $(params.azure-credentials)
+        - name: SUBSCRIPTION_ID
+          valueFrom:
+            secretKeyRef:
+              key: SUBSCRIPTION_ID
+              name: $(params.azure-credentials)
+        - name: PULL_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: .dockerconfigjson
+              name: $(params.aro-pull-secret)
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      name: provision-aro
+      script: |
+        #!/usr/bin/env bash
+        set -evo pipefail
+
+        CLUSTER_NAME="$(params.cluster-name)"
+        LOCATION="$(params.location)"
+        RESOURCE_GROUP="$CLUSTER_NAME"
+        VNET_NAME="$CLUSTER_NAME-vnet"
+        MASTER_SUBNET="$CLUSTER_NAME-ms"
+        WORKER_SUBNET="$CLUSTER_NAME-ws"
+
+        echo "Login using Service Principal"
+        az login --service-principal -u "$APP_ID" -p "$PASSWORD" --tenant "$TENANT_ID"
+
+        echo "Set subscription"
+        az account set --subscription "$SUBSCRIPTION_ID"
+
+        echo "Create Resource Group"
+        az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --tags 'owner=kua-pipeline'
+
+        # Register required providers
+        az provider register -n "Microsoft.RedHatOpenShift" --wait
+        az provider register -n "Microsoft.Authorization" --wait
+        az provider register -n "Microsoft.Network" --wait
+        az provider register -n "Microsoft.Compute" --wait
+        az provider register -n "Microsoft.ContainerRegistry" --wait
+        az provider register -n "Microsoft.ContainerService" --wait
+        az provider register -n "Microsoft.KeyVault" --wait
+        az provider register -n "Microsoft.Solutions" --wait
+        az provider register -n "Microsoft.Storage" --wait
+
+        echo "Create Virtual Network"
+        az network vnet create -g "$RESOURCE_GROUP" -n "$VNET_NAME" --address-prefixes 10.0.0.0/22 --tags 'owner=kua-pipeline'
+
+        echo "Create Subnets"
+        az network vnet subnet create -g "$RESOURCE_GROUP" --vnet-name "$VNET_NAME" -n "$MASTER_SUBNET" --address-prefixes 10.0.0.0/23 --service-endpoints Microsoft.ContainerRegistry
+        az network vnet subnet create -g "$RESOURCE_GROUP" --vnet-name "$VNET_NAME" -n "$WORKER_SUBNET" --address-prefixes 10.0.2.0/23 --service-endpoints Microsoft.ContainerRegistry
+
+        echo "Disable subnet private link service network policies"
+        az network vnet subnet update -g "$RESOURCE_GROUP" --vnet-name "$VNET_NAME" -n "$MASTER_SUBNET" --private-link-service-network-policies Disabled
+
+        echo "Create the ARO Cluster"
+        az aro create -g "$RESOURCE_GROUP" -n "$CLUSTER_NAME" --location "$LOCATION" --pull-secret "$PULL_SECRET" --master-subnet "$MASTER_SUBNET" --worker-subnet "$WORKER_SUBNET" --vnet "$VNET_NAME" --client-id "$APP_ID" --client-secret "$PASSWORD" --debug $(params.create-cmd-flags)
+
+        echo "Get cluster credentials"
+        credentials=$(az aro list-credentials -g "$RESOURCE_GROUP" -n "$CLUSTER_NAME")
+
+        # Return Cluster Information
+        echo -n $credentials | tee $(results.cluster-info.path)
+
