@@ -20,7 +20,7 @@ spec:
     - description: rapiDAST version - see releases in github.com/RedHatProductSecurity/rapidast
       name: rapidast-version
       type: string
-      default: 2.11.0
+      default: 2.12.0
     - description: Whether to skip cleanup or not (true/false)
       name: skip-cleanup
       type: string

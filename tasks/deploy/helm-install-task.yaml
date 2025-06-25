@@ -25,26 +25,26 @@ spec:
     - description: Kuadrant operator name. 'kuadrant-operator' or 'rhcl-operator'
       name: operator-name
       type: string
+    - description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'"
+      name: helm-install-flags
+      type: string
   steps:
   - name: helm-install-operators
-    args:
-      - install
-      - -n=default
-      - --values=$(workspaces.shared-workspace.path)/kuadrant-helm-install/values.yaml
-      - --values=/mount/values-additional-manifests/additionalManifests.yaml
-      - --set=kuadrant.indexImage=$(params.index-image)
-      - --set=kuadrant.channel=$(params.channel)
-      - --set=kuadrant.operatorName=$(params.operator-name)
-      - --set=istio.istioProvider=$(params.istio-provider)
-      - --set=gatewayAPI.version=$(params.gateway-crd)
-      - --set=tools.keycloak.operator.channel=$(params.keycloak-channel)
-      - --set=tools.enabled=true
-      - --wait
-      - --debug
-      - kuadrant-operators
-      - $(workspaces.shared-workspace.path)/kuadrant-helm-install/operators/
-    command:
-      - helm
+    script: |
+      helm install -n=default \
+      --values=$(workspaces.shared-workspace.path)/kuadrant-helm-install/values.yaml \
+      --values=/mount/values-additional-manifests/additionalManifests.yaml \
+      --set=kuadrant.indexImage=$(params.index-image) \
+      --set=kuadrant.channel=$(params.channel) \
+      --set=kuadrant.operatorName=$(params.operator-name) \
+      --set=istio.istioProvider=$(params.istio-provider) \
+      --set=gatewayAPI.version=$(params.gateway-crd) \
+      --set=tools.keycloak.operator.channel=$(params.keycloak-channel) \
+      --set=tools.enabled=true \
+      $(params.helm-install-flags) \
+      --wait --debug \
+      kuadrant-operators \
+      $(workspaces.shared-workspace.path)/kuadrant-helm-install/operators/
     volumeMounts:
       - mountPath: /mount/values-additional-manifests
         name: values-additional-manifests
@@ -54,25 +54,21 @@ spec:
     image: quay.io/kuadrant/testsuite-pipelines-tools:latest
     imagePullPolicy: Always
   - name: helm-install-instances
-    args:
-      - install
-      - -n=default
-      - --values=$(workspaces.shared-workspace.path)/kuadrant-helm-install/values.yaml
-      - --values=/mount/values-additional-manifests/additionalManifests.yaml
-      - --set=kuadrant.indexImage=$(params.index-image)
-      - --set=kuadrant.channel=$(params.channel)
-      - --set=kuadrant.operatorName=$(params.operator-name)
-      - --set=istio.istioProvider=$(params.istio-provider)
-      - --set=gatewayAPI.version=$(params.gateway-crd)
-      - --set=tools.keycloak.operator.channel=$(params.keycloak-channel)
-      - --set=tools.enabled=true
-      - --timeout=10m0s
-      - --wait
-      - --debug
-      - kuadrant-instances
-      - $(workspaces.shared-workspace.path)/kuadrant-helm-install/instances/
-    command:
-      - helm
+    script: |
+      helm install -n=default \
+      --values=$(workspaces.shared-workspace.path)/kuadrant-helm-install/values.yaml \
+      --values=/mount/values-additional-manifests/additionalManifests.yaml \
+      --set=kuadrant.indexImage=$(params.index-image) \
+      --set=kuadrant.channel=$(params.channel) \
+      --set=kuadrant.operatorName=$(params.operator-name) \
+      --set=istio.istioProvider=$(params.istio-provider) \
+      --set=gatewayAPI.version=$(params.gateway-crd) \
+      --set=tools.keycloak.operator.channel=$(params.keycloak-channel) \
+      --set=tools.enabled=true \
+      $(params.helm-install-flags) \
+      --wait --debug --timeout=10m0s \
+      kuadrant-instances \
+      $(workspaces.shared-workspace.path)/kuadrant-helm-install/instances/
     volumeMounts:
       - mountPath: /mount/values-additional-manifests
         name: values-additional-manifests
