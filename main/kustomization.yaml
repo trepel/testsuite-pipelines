@@ -6,4 +6,8 @@ commonLabels:
 
 resources:
   - ../tasks/
+  - ../tasks/deploy/
+  - ../tasks/infra/
+  - ../tasks/provision-install-test/
   - pipeline.yaml
+  - provision-install-test-pipeline.yaml

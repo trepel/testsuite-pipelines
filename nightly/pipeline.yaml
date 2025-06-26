@@ -39,7 +39,7 @@ spec:
       name: kube-api-second
       type: string
     - default: nightly
-      description: Prefix of the launch name saved in report portal (nightly, username, manual, etc.)
+      description: Prefix of the launch name saved in report portal (nightly, username, manual, etc.). In case of release candidate testing use kuadrant-v<version>, rhcl-v<version>, or authorino-v<version>
       name: launch-name
       type: string
     - default: ""
