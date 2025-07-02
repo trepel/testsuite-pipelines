@@ -1,0 +1,95 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: parameter-sanity-check
+spec:
+  description: Sanitization of input parameters
+  params:
+    - name: cluster-type
+      type: string
+    - name: cluster-name
+      type: string
+    - name: provider-credentials
+      type: string
+    - name: create-cmd-flags
+      type: string
+    - name: index-image
+      type: string
+    - name: channel
+      type: string
+    - name: operator-name
+      type: string
+  results:
+    - name: provider-credentials
+      description: Credentials for cloud provider
+    - name: create-cmd-flags
+      description: Flags for cluster creation command
+  steps:
+    - computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      name: parameter-sanity-check
+      script: |
+        #!/usr/bin/env bash
+        set -evo pipefail
+
+        # Use ocm.json created by ocm-login Task
+        export OCM_CONFIG=$(workspaces.shared-workspace.path)/ocm.json
+
+        provider_creds="$(params.provider-credentials)"
+        cmd_flags="$(params.create-cmd-flags)"
+
+        # fail early if secret already exists
+        if kubectl get secret "$(params.cluster-name)-credentials" -n "$NAMESPACE" &>/dev/null; then
+          echo "Secret '$(params.cluster-name)-credentials' already exists in namespace '$NAMESPACE'. This indicates that a cluster with the same name already exists. Please use a different cluster name, or verify that no such cluster is present and remove the associated secret manually"
+          exit 1
+        fi
+
+        # make sure proper defaults are used if provider credentials are not specified
+        if [[ -z "${provider_creds//[[:space:]]/}" ]]; then
+          if [[ "$(params.cluster-type)" == "osd-aws" ]]; then
+            echo -n 'kua-aws-credentials' | tee $(results.provider-credentials.path) && echo ""
+          fi
+          if [[ "$(params.cluster-type)" == "osd-gcp" ]]; then
+            echo -n 'kua-gcp-credentials' | tee $(results.provider-credentials.path) && echo ""
+          fi
+          if [[ "$(params.cluster-type)" == "rosa" ]]; then
+            echo -n 'kua-rosa-credentials' | tee $(results.provider-credentials.path) && echo ""
+          fi
+        else
+          echo -n "$(params.provider-credentials)" | tee $(results.provider-credentials.path) && echo ""
+        fi
+
+        # determine what version to use if not specified
+        version=""
+        if [[ "$cmd_flags" != *"--version"* ]]; then
+          version=" --version=$(ocm list versions --default)"
+        fi
+
+        # make sure proper default flags are used for cluster creation command if these are not specified
+        if [[ -z "${cmd_flags//[[:space:]]/}" ]]; then
+          if [[ "$(params.cluster-type)" == "osd-aws" ]]; then
+            cmd_flags="${version} --provider=aws --ccs --channel-group=stable --compute-machine-type=m5.xlarge --compute-nodes=3 --enable-autoscaling=false --multi-az=false --region=us-east-1 --machine-cidr=10.11.128.0/23 --pod-cidr=10.11.64.0/18 --service-cidr=10.11.0.0/18 --host-prefix=23"
+          echo -n $cmd_flags | tee $(results.create-cmd-flags.path) && echo ""
+          fi
+          if [[ "$(params.cluster-type)" == "osd-gcp" ]]; then
+            cmd_flags="${version} --provider=gcp --ccs --channel-group=stable --compute-machine-type=n2-standard-4 --compute-nodes=3 --enable-autoscaling=false --multi-az=false --region=us-east1 --machine-cidr=10.0.0.0/16 --pod-cidr=10.128.0.0/14 --service-cidr=172.36.0.0/16 --host-prefix=23"
+          echo -n $cmd_flags | tee $(results.create-cmd-flags.path) && echo ""
+          fi
+          if [[ "$(params.cluster-type)" == "rosa" ]]; then
+            cmd_flags="${version} --compute-machine-type m5.xlarge --replicas 3 --non-sts --use-local-credentials -y"
+            echo -n $cmd_flags | tee $(results.create-cmd-flags.path) && echo ""
+          fi
+        else
+          echo -n "$(params.create-cmd-flags)" | tee $(results.create-cmd-flags.path) && echo ""
+        fi
+  workspaces:
+    - name: shared-workspace

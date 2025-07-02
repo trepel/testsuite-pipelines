@@ -13,7 +13,7 @@ spec:
     - description: A 'ossm3' for Openshift Service mesh v3, 'ocp' for installing on Openshift 4.19+
       name: istio-provider
       type: string
-    - description: GatewayAPI CRD version. Leave empty if installing on ocp4.19+
+    - description: GatewayAPI CRD version. v1.0.0, v1.1.0, v1.2.1, v1.3.0 available; Leave empty if installing on ocp4.19+
       name: gateway-crd
       type: string
     - description: Keycloak subscription channel
