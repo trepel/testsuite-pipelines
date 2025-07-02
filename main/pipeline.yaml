@@ -36,7 +36,7 @@ spec:
       name: additional-env
       type: string
     - default: pipeline
-      description: Prefix of the launch name saved in report portal (nightly, username, manual, etc.)
+      description: Prefix of the launch name saved in report portal (nightly, username, manual, etc.). In case of release candidate testing use kuadrant-v<version>, rhcl-v<version>, or authorino-v<version>
       name: launch-name
       type: string
     - default: ""
