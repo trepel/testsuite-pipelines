@@ -73,16 +73,5 @@ spec:
           value: $(params.kubeconfig-path)
       image: quay.io/kuadrant/testsuite-pipelines-tools:latest
       imagePullPolicy: Always
-    - name: delete-istio-crd
-      args:
-        - kubectl get crd -o name | grep "istio.io" | xargs --no-run-if-empty kubectl delete
-      command:
-        - /bin/bash
-        - -c
-      env:
-        - name: KUBECONFIG
-          value: $(params.kubeconfig-path)
-      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
-      imagePullPolicy: Always
   workspaces:
   - name: shared-workspace
