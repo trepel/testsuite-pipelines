@@ -73,5 +73,33 @@ spec:
           value: $(params.kubeconfig-path)
       image: quay.io/kuadrant/testsuite-pipelines-tools:latest
       imagePullPolicy: Always
+    - name: uninstall-tools-instances
+      args:
+        - uninstall
+        - -n=default
+        - --ignore-not-found
+        - --wait
+        - tools-instances
+      command:
+        - helm
+      env:
+        - name: KUBECONFIG
+          value: $(params.kubeconfig-path)
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+    - name: uninstall-tools-operators
+      args:
+        - uninstall
+        - -n=default
+        - --ignore-not-found
+        - --wait
+        - tools-operators
+      command:
+        - helm
+      env:
+        - name: KUBECONFIG
+          value: $(params.kubeconfig-path)
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
   workspaces:
   - name: shared-workspace

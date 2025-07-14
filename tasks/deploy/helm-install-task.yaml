@@ -32,7 +32,6 @@ spec:
   - name: helm-install-operators
     script: |
       helm install -n=default \
-      --values=$(workspaces.shared-workspace.path)/kuadrant-helm-install/values.yaml \
       --values=/mount/values-additional-manifests/additionalManifests.yaml \
       --set=kuadrant.indexImage=$(params.index-image) \
       --set=kuadrant.channel=$(params.channel) \
@@ -56,7 +55,6 @@ spec:
   - name: helm-install-instances
     script: |
       helm install -n=default \
-      --values=$(workspaces.shared-workspace.path)/kuadrant-helm-install/values.yaml \
       --values=/mount/values-additional-manifests/additionalManifests.yaml \
       --set=kuadrant.indexImage=$(params.index-image) \
       --set=kuadrant.channel=$(params.channel) \
@@ -66,12 +64,34 @@ spec:
       --set=tools.keycloak.operator.channel=$(params.keycloak-channel) \
       --set=tools.enabled=true \
       $(params.helm-install-flags) \
-      --wait --debug --timeout=10m0s \
+      --wait --debug \
       kuadrant-instances \
       $(workspaces.shared-workspace.path)/kuadrant-helm-install/instances/
     volumeMounts:
       - mountPath: /mount/values-additional-manifests
         name: values-additional-manifests
+    env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    imagePullPolicy: Always
+  - name: helm-install-tools-operators
+    script: |
+      helm install -n=default \
+      --wait --debug \
+      tools-operators \
+      $(workspaces.shared-workspace.path)/kuadrant-helm-install/tools/operators
+    env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    imagePullPolicy: Always
+  - name: helm-install-tools-instances
+    script: |
+      helm install -n=default \
+      --wait --debug --timeout=10m0s \
+      tools-instances \
+      $(workspaces.shared-workspace.path)/kuadrant-helm-install/tools/instances
     env:
       - name: KUBECONFIG
         value: $(params.kubeconfig-path)
