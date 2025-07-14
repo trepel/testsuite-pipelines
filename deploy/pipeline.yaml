@@ -30,7 +30,7 @@ spec:
   - description: GatewayAPI CRD version. v1.0.0, v1.1.0, v1.2.1, v1.3.0 available; Leave empty if installing on ocp4.19+
     name: gateway-crd
     type: string
-    default: v1.2.1
+    default: v1.3.0
   - description: Keycloak subscription channel
     name: keycloak-channel
     type: string
