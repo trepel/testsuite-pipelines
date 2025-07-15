@@ -8,7 +8,7 @@ spec:
       description: Nightly image url
   steps:
     - args:
-      - echo "quay.io/kuadrant/kuadrant-operator-catalog:nightly-$(date +%d-%m-%Y)" | tee $(results.nightly-image.path)
+      - echo -n "quay.io/kuadrant/kuadrant-operator-catalog:nightly-$(date +%d-%m-%Y)" | tee $(results.nightly-image.path)
       command:
         - /bin/sh
         - -c
