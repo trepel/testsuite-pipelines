@@ -13,4 +13,4 @@ resources:
   - rosa-login-task.yaml
   - provision-rosa-task.yaml
   - delete-rosa-task.yaml
-
+  - prepare-for-rhcl-rc-install-task.yaml
