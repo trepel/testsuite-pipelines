@@ -19,5 +19,8 @@ RUN curl -LSs -o awscli.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_6
     && unzip awscli.zip \
     && ./aws/install -i /usr/local/aws -b /usr/local/bin \
     && rm -rf ./aws ./awscli.zip
+RUN rpm --import https://packages.microsoft.com/keys/microsoft.asc \
+    && rpm -Uvh https://packages.microsoft.com/config/rhel/9.0/packages-microsoft-prod.rpm \
+    && microdnf -y install azure-cli
 
 CMD ["/bin/bash"]
