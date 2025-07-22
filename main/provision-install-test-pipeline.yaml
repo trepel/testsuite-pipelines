@@ -278,12 +278,6 @@ spec:
         - get-osd-credentials
       workspaces:
         - name: shared-workspace
-    - name: clone
-      runAfter:
-        - wait-for-valid-certificates
-      taskRef:
-        kind: Task
-        name: clone
       workspaces:
         - name: shared-workspace
           workspace: shared-workspace
@@ -321,7 +315,6 @@ spec:
         - name: kubeconfig-path
           value: $(tasks.kubectl-login.results.kubeconfig-path)
       runAfter:
-        - clone
         - kubectl-login
         - check-image-existence
       taskRef:
