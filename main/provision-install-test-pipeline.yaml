@@ -59,7 +59,7 @@ spec:
       name: keycloak-channel
       type: string
     - default: ' '
-      description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'"
+      description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
       name: helm-install-flags
       type: string
 # Testsuite related parameters
@@ -330,6 +330,25 @@ spec:
       workspaces:
         - name: shared-workspace
           workspace: shared-workspace
+    - name: prepare-for-rhcl-rc-install
+      when:
+        - input: "$(params.operator-name)"
+          operator: in
+          values: ['rhcl-operator']
+        - input: "$(params.index-image)"
+          operator: notin
+          values: ['']
+      params:
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+      runAfter:
+        - helm-uninstall
+      taskRef:
+        kind: Task
+        name: prepare-for-rhcl-rc-install
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
     - name: helm-install
       params:
         - name: index-image
@@ -350,6 +369,7 @@ spec:
           value: $(params.helm-install-flags)
       runAfter:
         - helm-uninstall
+        - prepare-for-rhcl-rc-install
       taskRef:
         kind: Task
         name: helm-install
