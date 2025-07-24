@@ -69,6 +69,16 @@ kubectl create secret generic kua-gcp-credentials --from-file=gcp-osd-ccs-admin-
 kubectl create secret generic kua-rosa-credentials --from-literal=AWS_ACCOUNT_ID="xxx" --from-literal=AWS_ACCESS_KEY_ID="xxx" --from-literal=AWS_SECRET_ACCESS_KEY="xxx" -n ${PIPELINE_NAMESPACE}
 ```
 
+- Opaque secret containing service principal credentials for Azure Portal (pipelines provisioning ARO cluster only). E.g.
+```shell
+kubectl create secret generic kua-azure-credentials --from-literal=APP_ID="xxx" --from-literal=PASSWORD="xxx" --from-literal=TENANT_ID="xxx" --from-literal=SUBSCRIPTION_ID="xxx" -n ${PIPELINE_NAMESPACE}
+```
+
+- Pull secret containing auth sections for brew and stage (optional) registries (pipelines provisioning ARO cluster only). E.g.
+```shell
+kubectl create secret generic aro-pull-secret --from-file=.dockerconfigjson=/path/to/your/auths.json  --type=kubernetes.io/dockerconfigjson -n ${PIPELINE_NAMESPACE}
+```
+
 ### Resources required for rapiDAST pipeline
 - Opaque secret containing credentials for Google Cloud storage where rapiDAST scan results will be stored. E.g.
 ```shell

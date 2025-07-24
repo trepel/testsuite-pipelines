@@ -1,0 +1,65 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: delete-aro
+spec:
+  description: 'Deletes ARO'
+  params:
+    - name: azure-credentials
+      type: string
+    - name: cluster-name
+      type: string
+  steps:
+    - computeResources:
+        limits:
+          cpu: '150m'
+          memory: 400Mi
+      env:
+        - name: APP_ID
+          valueFrom:
+            secretKeyRef:
+              key: APP_ID
+              name: $(params.azure-credentials)
+        - name: PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: PASSWORD
+              name: $(params.azure-credentials)
+        - name: TENANT_ID
+          valueFrom:
+            secretKeyRef:
+              key: TENANT_ID
+              name: $(params.azure-credentials)
+        - name: SUBSCRIPTION_ID
+          valueFrom:
+            secretKeyRef:
+              key: SUBSCRIPTION_ID
+              name: $(params.azure-credentials)
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      name: delete-aro
+      script: |
+        #!/usr/bin/env bash
+        set -evo pipefail
+
+        echo "Login using Service Principal"
+        az login --service-principal -u "$APP_ID" -p "$PASSWORD" --tenant "$TENANT_ID"
+
+        echo "Set subscription"
+        az account set --subscription "$SUBSCRIPTION_ID"
+
+        RESOURCE_GROUP="$(params.cluster-name)"
+        CLUSTER_NAME="$(params.cluster-name)"
+
+        if az aro show -g "$RESOURCE_GROUP" -n "$(params.cluster-name)" &>/dev/null; then
+            echo "Deleting ARO cluster '$CLUSTER_NAME' in resource group '$RESOURCE_GROUP'..."
+            az aro delete --name "$CLUSTER_NAME" --resource-group "$RESOURCE_GROUP" --yes
+            sleep 10
+        else
+            echo "ARO cluster '$CLUSTER_NAME' in resource group '$RESOURCE_GROUP' not found."
+        fi
+
+        VNET_NAME="$CLUSTER_NAME-vnet"
+        az network vnet delete -g "$RESOURCE_GROUP" -n "$VNET_NAME"
+
+        az group delete -n "$RESOURCE_GROUP" --yes

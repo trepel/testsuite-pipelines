@@ -11,3 +11,5 @@ resources:
   - osd-gcp-pipeline.yaml
   - rosa-pipeline.yaml
   - delete-rosa-pipeline.yaml
+  - aro-pipeline.yaml
+  - delete-aro-pipeline.yaml

@@ -14,3 +14,5 @@ resources:
   - provision-rosa-task.yaml
   - delete-rosa-task.yaml
   - prepare-for-rhcl-rc-install-task.yaml
+  - provision-aro-task.yaml
+  - delete-aro-task.yaml
