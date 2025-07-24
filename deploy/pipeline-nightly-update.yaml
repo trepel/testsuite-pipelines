@@ -32,13 +32,6 @@ spec:
     type: string
     default: ' '
   tasks:
-  - name: clone
-    taskRef:
-      kind: Task
-      name: clone
-    workspaces:
-    - name: shared-workspace
-      workspace: shared-workspace
   - name: nightly-image-date
     taskRef:
       kind: Task
@@ -71,7 +64,6 @@ spec:
       - name: kubeconfig-path
         value: $(tasks.kubectl-login.results.kubeconfig-path)
     runAfter:
-    - clone
     - kubectl-login
     - check-image-existence
     taskRef:

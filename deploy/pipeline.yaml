@@ -40,13 +40,6 @@ spec:
     type: string
     default: ' '
   tasks:
-  - name: clone
-    taskRef:
-      kind: Task
-      name: clone
-    workspaces:
-    - name: shared-workspace
-      workspace: shared-workspace
   - name: check-image-existence
     params:
       - name: index-image
@@ -73,7 +66,6 @@ spec:
       - name: kubeconfig-path
         value: $(tasks.kubectl-login.results.kubeconfig-path)
     runAfter:
-    - clone
     - kubectl-login
     - check-image-existence
     taskRef:
