@@ -36,6 +36,12 @@ kubectl create cm rp-ca-bundle --from-file=tls-ca-bundle.pem=./tls-ca-bundle.pem
 kubectl create cm pipeline-settings --from-file=settings.local.yaml=./settings.local.yaml -n ${PIPELINE_NAMESPACE}
 ```
 
+- Opaque Secret named additional-auth-entries containing "auth" sections that will be added to global pull secret. Useful if consuming images from private registries.
+```shell
+export ADDITIONAL_AUTH_ENTRIES='"desired.registry.io": {"auth": "base64-encoded-creds"}'
+kubectl create secret generic additional-auth-entries --from-literal="additional-auth-entries=$ADDITIONAL_AUTH_ENTRIES" -n "${PIPELINE_NAMESPACE}"
+```
+
 ### Helm pipelines
 - Opaque Secret named values-additional-manifests containing secrets for testsuite run. Example: https://github.com/azgabur/kuadrant-helm-install/blob/main/example-additionalManifests.yaml
 ```shell

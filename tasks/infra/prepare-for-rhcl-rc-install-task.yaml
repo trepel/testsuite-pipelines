@@ -1,0 +1,56 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: prepare-for-rhcl-rc-install
+spec:
+  description: Prepare for RHCL RC installation
+  params:
+    - name: kubeconfig-path
+      type: string
+  steps:
+    - computeResources:
+        limits:
+          cpu: '200m'
+          memory: 256Mi
+      env:
+        - name: KUBECONFIG
+          value: $(params.kubeconfig-path)
+        - name: ADDITIONAL_AUTH_ENTRIES
+          valueFrom:
+            secretKeyRef:
+              key: additional-auth-entries
+              name: additional-auth-entries
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      name: prepare-for-rhcl-rc-install
+      script: |
+        #!/usr/bin/env bash
+        set -evo pipefail
+
+        # Creates ICSP that allow to mirroring to brew
+        kubectl apply -f -<<EOF
+            apiVersion: operator.openshift.io/v1alpha1
+            kind: ImageContentSourcePolicy
+            metadata:
+              name: errata-from-brew
+            spec:
+              repositoryDigestMirrors:
+              - mirrors:
+                - brew.registry.redhat.io/rh-osbs
+                source: registry-proxy.engineering.redhat.com/rh-osbs
+              - mirrors:
+                  - brew.registry.redhat.io/rhcl-1
+                source: registry.redhat.io/rhcl-1
+        EOF
+
+        # update global pull secret
+        kubectl get secret/pull-secret -n openshift-config -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d > current-auths.json
+
+        jq --argjson new_auths "{${ADDITIONAL_AUTH_ENTRIES}}" '.auths += $new_auths' current-auths.json > updated-auths.json
+
+        UPDATED_AUTHS_JSON=$(base64 -w0 < updated-auths.json)
+
+        kubectl patch secret pull-secret -n openshift-config --type=merge -p='{"data":{".dockerconfigjson":"'"$UPDATED_AUTHS_JSON"'"}}'
+  workspaces:
+    - name: shared-workspace
+
