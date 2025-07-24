@@ -13,8 +13,8 @@ spec:
       description: 'What OCM instance to use, either ''staging'' or ''production'''
       name: ocm-instance
       type: string
-    - description: OSD cluster ID that is to be deleted
-      name: cluster-id
+    - description: Name of the cluster that is to be deleted
+      name: cluster-name
       type: string
   tasks:
     - name: ocm-login
@@ -28,21 +28,44 @@ spec:
         name: ocm-login
       workspaces:
         - name: shared-workspace
+    - name: get-cluster-id
+      params:
+        - name: cluster-name
+          value: $(params.cluster-name)
+      runAfter:
+        - ocm-login
+      taskRef:
+        kind: Task
+        name: get-cluster-id
+      workspaces:
+        - name: shared-workspace
+    - name: cluster-secret-cleanup
+      params:
+        - name: cluster-name
+          value: $(params.cluster-name)
+      runAfter:
+        - get-cluster-id
+      taskRef:
+        kind: Task
+        name: cluster-secret-cleanup
+      workspaces:
+        - name: shared-workspace
     - name: delete-osd
       params:
         - name: cluster-id
-          value: $(params.cluster-id)
+          value: $(tasks.get-cluster-id.results.cluster-id)
       taskRef:
         kind: Task
         name: delete-osd
       runAfter:
-        - ocm-login
+        - get-cluster-id
+        - cluster-secret-cleanup
       workspaces:
         - name: shared-workspace
     - name: wait-till-osd-is-deleted
       params:
         - name: cluster-id
-          value: $(params.cluster-id)
+          value: $(tasks.get-cluster-id.results.cluster-id)
       taskRef:
         kind: Task
         name: wait-till-osd-is-deleted

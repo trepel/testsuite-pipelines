@@ -18,7 +18,7 @@ spec:
       name: ocm-instance
       type: string
     - description: ROSA cluster ID that is to be deleted
-      name: cluster-id
+      name: cluster-name
       type: string
   tasks:
     - name: rosa-login
@@ -36,10 +36,32 @@ spec:
         name: rosa-login
       workspaces:
         - name: shared-workspace
+    - name: get-cluster-id
+      params:
+        - name: cluster-name
+          value: $(params.cluster-name)
+      runAfter:
+        - rosa-login
+      taskRef:
+        kind: Task
+        name: get-cluster-id
+      workspaces:
+        - name: shared-workspace
+    - name: cluster-secret-cleanup
+      params:
+        - name: cluster-name
+          value: $(params.cluster-name)
+      runAfter:
+        - get-cluster-id
+      taskRef:
+        kind: Task
+        name: cluster-secret-cleanup
+      workspaces:
+        - name: shared-workspace
     - name: delete-rosa
       params:
         - name: cluster-id
-          value: $(params.cluster-id)
+          value: $(tasks.get-cluster-id.results.cluster-id)
         - name: aws-credentials
           value: $(params.aws-credentials)
         - name: region
@@ -48,7 +70,8 @@ spec:
         kind: Task
         name: delete-rosa
       runAfter:
-        - rosa-login
+        - get-cluster-id
+        - cluster-secret-cleanup
       workspaces:
         - name: shared-workspace
   workspaces:
