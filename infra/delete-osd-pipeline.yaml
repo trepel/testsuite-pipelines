@@ -48,8 +48,6 @@ spec:
       taskRef:
         kind: Task
         name: cluster-secret-cleanup
-      workspaces:
-        - name: shared-workspace
     - name: delete-osd
       params:
         - name: cluster-id
