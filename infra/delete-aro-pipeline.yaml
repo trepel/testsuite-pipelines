@@ -14,12 +14,23 @@ spec:
       name: cluster-name
       type: string
   tasks:
+    - name: cluster-secret-cleanup
+      params:
+        - name: cluster-name
+          value: $(params.cluster-name)
+      taskRef:
+        kind: Task
+        name: cluster-secret-cleanup
+      workspaces:
+        - name: shared-workspace
     - name: delete-aro
       params:
         - name: cluster-name
           value: $(params.cluster-name)
         - name: azure-credentials
           value: $(params.azure-credentials)
+      runAfter:
+        - cluster-secret-cleanup
       taskRef:
         kind: Task
         name: delete-aro

@@ -89,7 +89,7 @@ spec:
         - name: console-url
           value: $(tasks.get-osd-credentials.results.console-url)
         - name: api-url
-          value: $(tasks.get-osd-credentials.results.api-url)
+          value: $(tasks.get-osd-credentials.results.kube-api)
       taskRef:
         kind: Task
         name: wait-for-valid-certificates

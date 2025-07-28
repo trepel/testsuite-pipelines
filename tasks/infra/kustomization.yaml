@@ -16,3 +16,5 @@ resources:
   - prepare-for-rhcl-rc-install-task.yaml
   - provision-aro-task.yaml
   - delete-aro-task.yaml
+  - get-cluster-id-task.yaml
+  - cluster-secret-cleanup-task.yaml
