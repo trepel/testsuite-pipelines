@@ -278,9 +278,6 @@ spec:
         - get-osd-credentials
       workspaces:
         - name: shared-workspace
-      workspaces:
-        - name: shared-workspace
-          workspace: shared-workspace
     - name: check-image-existence
       when:
         - input: "$(params.index-image)"
@@ -489,5 +486,3 @@ spec:
       taskRef:
         kind: Task
         name: cluster-secret-cleanup
-      workspaces:
-        - name: shared-workspace
