@@ -38,6 +38,8 @@ spec:
           value: $(params.aro-pull-secret)
         - name: location
           value: $(params.location)
+        - name: provision-cluster
+          value: true
       taskRef:
         kind: Task
         name: provision-aro
