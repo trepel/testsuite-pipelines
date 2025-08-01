@@ -1,7 +1,7 @@
 apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
-  name: provision-install-test-pipeline
+  name: provision-upgrade-test-pipeline
 spec:
   params:
 # Cluster related parameters
@@ -37,16 +37,16 @@ spec:
       description: Cluster creation flags. Leave empty to use defaults (they depend on Cloud Provider)
       name: create-cmd-flags
       type: string
-# Kuadrant/RHCL installation related parameters
-    - default: quay.io/kuadrant/kuadrant-operator-catalog:v1.2.0
-      description: Kuadrant/RHCL index image, leave empty to install current RHCL GA
+# Kuadrant/RHCL installation/upgrade related parameters
+    - default: ' '
+      description: Kuadrant/RHCL index image, must contain proper bundle chain for upgrade
       name: index-image
       type: string
     - default: stable
       description: Kuadrant channel (stable, preview)
       name: channel
       type: string
-    - default: kuadrant-operator
+    - default: rhcl-operator
       description: Operator name (kuadrant-operator, rhcl-operator)
       name: operator-name
       type: string
@@ -62,8 +62,8 @@ spec:
       description: Keycloak subscription channel
       name: keycloak-channel
       type: string
-    - default: ' '
-      description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
+    - default: '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=rhcl-operator.v1.1.0'
+      description: Additional flags for helm install command, specify desired 'upgrade from' version"
       name: helm-install-flags
       type: string
 # Testsuite related parameters
@@ -75,9 +75,13 @@ spec:
       description: Openshift project
       name: project
       type: string
+    - default: smoke
+      description: Makefile target for pre-upgrade tests
+      name: pre-upgrade-make-target
+      type: string
     - default: test
-      description: Makefile target for tests
-      name: make-target
+      description: Makefile target for post-upgrade tests
+      name: post-upgrade-make-target
       type: string
     - default: ' '
       description: Pytest flags to use with Make (flags="${pytest-flags}" make kuadrant)
@@ -376,14 +380,14 @@ spec:
       workspaces:
         - name: shared-workspace
           workspace: shared-workspace
-    - name: run-tests
+    - name: run-tests-pre-upgrade
       params:
         - name: testsuite-image
           value: $(params.testsuite-image)
         - name: project
           value: $(params.project)
         - name: make-target
-          value: $(params.make-target)
+          value: $(params.pre-upgrade-make-target)
         - name: pytest-flags
           value: $(params.pytest-flags)
         - name: settings-cm
@@ -396,6 +400,42 @@ spec:
           value: $(tasks.get-osd-credentials.results.credentials-secret)
       runAfter:
         - helm-install
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+    - name: upgrade-to-latest
+      params:
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+      runAfter:
+        - run-tests-pre-upgrade
+      taskRef:
+        kind: Task
+        name: upgrade-to-latest
+      workspaces:
+        - name: shared-workspace
+    - name: run-tests-post-upgrade
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: $(params.post-upgrade-make-target)
+        - name: pytest-flags
+          value: $(params.pytest-flags)
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: additional-env
+          value: $(params.additional-env)
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+        - name: cluster-credentials
+          value: $(tasks.get-osd-credentials.results.credentials-secret)
+      runAfter:
+        - upgrade-to-latest
       taskRef:
         kind: Task
         name: run-tests
@@ -414,13 +454,13 @@ spec:
         - name: testsuite-image
           value: $(params.testsuite-image)
         - name: make-target
-          value: $(params.make-target)
+          value: $(params.post-upgrade-make-target)
         - name: rp-project
           value: $(params.rp-project)
         - name: ocp-version
           value: $(tasks.kubectl-login.results.ocp-version)
       runAfter:
-        - run-tests
+        - run-tests-post-upgrade
       taskRef:
         kind: Task
         name: upload-results
@@ -436,7 +476,7 @@ spec:
           value: $(tasks.kubectl-login.results.kubeconfig-path)
       runAfter:
         - upload-results
-        - run-tests
+        - run-tests-post-upgrade
       taskRef:
         kind: Task
         name: helm-uninstall

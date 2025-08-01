@@ -1,0 +1,41 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: upgrade-to-latest
+spec:
+  description: Upgrade Kuadrant/RHCL to latest version via OLM
+  params:
+    - name: kubeconfig-path
+      type: string
+  steps:
+    - computeResources:
+        limits:
+          cpu: '100m'
+          memory: 128Mi
+      env:
+        - name: KUBECONFIG
+          value: $(params.kubeconfig-path)
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      name: upgrade-to-latest
+      script: |
+        #!/usr/bin/env bash
+        set -evo pipefail
+
+        # Get the namespace of the Subsciption (typically kuadrant-system but it can be different)
+        namespace=$(kubectl get subscription --all-namespaces -o json | jq -r '.items[] | select(.metadata.name == "kuadrant-operator") | .metadata.namespace')
+        if [[ -z "$namespace" ]]; then
+            echo "Subcription 'kuadrant-operator' not found in any namespace."
+            exit 1
+        fi
+
+        # Get the name of InstallPlan and approve it
+        kubectl wait --for=jsonpath={.status.installPlanRef.name} subscription kuadrant-operator -n $namespace --timeout=10s
+        installPlan=$(kubectl get subscription kuadrant-operator -n $namespace -o=jsonpath={.status.installPlanRef.name})
+        kubectl patch installplan $installPlan -n $namespace --type merge --patch '{"spec":{"approved":true}}'
+
+        # Wait for InstallPlan to complete
+        kubectl wait installplan $installPlan -n $namespace --timeout=300s --for=condition=installed=true
+  workspaces:
+    - name: shared-workspace
+

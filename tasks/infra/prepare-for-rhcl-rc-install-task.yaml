@@ -50,7 +50,27 @@ spec:
 
         UPDATED_AUTHS_JSON=$(base64 -w0 < updated-auths.json)
 
-        kubectl patch secret pull-secret -n openshift-config --type=merge -p='{"data":{".dockerconfigjson":"'"$UPDATED_AUTHS_JSON"'"}}'
+        patch_status=$(kubectl patch secret pull-secret -n openshift-config --type=merge -p='{"data":{".dockerconfigjson":"'"$UPDATED_AUTHS_JSON"'"}}')
+
+        # wait for global pull secret change to get applied on all nodes
+        if [[ "$patch_status" != *"no change"* ]]; then
+            kubectl wait --for=condition=Updating --timeout=60s mcp/worker
+            kubectl wait --for=condition=Updated --timeout=600s mcp/master
+            kubectl wait --for=condition=Updated --timeout=300s mcp/worker
+            update_finished=$(kubectl get mcp -o json | jq -r '([ .items[] |
+                select(
+                  (.status.conditions[] | select(.type=="Updated").status == "True") and
+                  (.status.conditions[] | select(.type=="Updating").status == "False") and
+                  (.status.conditions[] | select(.type=="Degraded").status == "False")
+                )] | length) == (.items | length)'
+            )
+            if [[ "$update_finished" == "true" ]]; then
+                echo "Global pull secret change has been successfully applied to all nodes"
+            else
+                echo "Global pull secret change has not been applied to all nodes in time"
+                exit 1
+            fi
+        fi
   workspaces:
     - name: shared-workspace
 

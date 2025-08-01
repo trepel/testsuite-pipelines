@@ -13,6 +13,8 @@ spec:
       type: string
     - name: region
       type: string
+    - name: provision-cluster
+      type: string
   results:
     - name: cluster-id
       description: cluster ID that OCM uses to identify the cluster
@@ -48,7 +50,9 @@ spec:
         export OCM_CONFIG=$(workspaces.shared-workspace.path)/ocm.json
 
         # OSD Cluster Creation Trigger
-        rosa create cluster --cluster-name $(params.cluster-name) --region $(params.region) $(params.create-cmd-flags)
+        if [[ "$(params.provision-cluster)" == "true" ]]; then
+            rosa create cluster --cluster-name $(params.cluster-name) --region $(params.region) $(params.create-cmd-flags)
+        fi
 
         # Include cluster ID in results
         echo -n `ocm get /api/clusters_mgmt/v1/clusters --parameter search="name like '$(params.cluster-name)'" | jq -r '.items[0].id'` | tee $(results.cluster-id.path)

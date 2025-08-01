@@ -11,6 +11,8 @@ spec:
       type: string
     - name: cluster-name
       type: string
+    - name: provision-cluster
+      type: string
   results:
     - name: cluster-id
       description: cluster ID that OCM uses to identify the cluster
@@ -39,7 +41,9 @@ spec:
         echo -n "${SERVICE_ACCOUNT_FILE}" > gcp-osd-ccs-admin-sa-security-key.json
 
         # OSD Cluster Creation Trigger
-        ocm create cluster $(params.cluster-name) $(params.create-cmd-flags) --service-account-file=gcp-osd-ccs-admin-sa-security-key.json
+        if [[ "$(params.provision-cluster)" == "true" ]]; then
+            ocm create cluster $(params.cluster-name) $(params.create-cmd-flags) --service-account-file=gcp-osd-ccs-admin-sa-security-key.json
+        fi
 
         # Explicit removal of the file since it contains sensitive info
         rm gcp-osd-ccs-admin-sa-security-key.json

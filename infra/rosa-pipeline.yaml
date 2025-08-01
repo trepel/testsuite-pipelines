@@ -55,6 +55,8 @@ spec:
           value: $(params.cluster-name)
         - name: region
           value: $(params.region)
+        - name: provision-cluster
+          value: true
       taskRef:
         kind: Task
         name: provision-rosa
@@ -77,6 +79,8 @@ spec:
       params:
         - name: cluster-id
           value: $(tasks.provision-rosa.results.cluster-id)
+        - name: provision-cluster
+          value: true
       taskRef:
         kind: Task
         name: get-osd-credentials
