@@ -29,6 +29,30 @@ spec:
       name: helm-install-flags
       type: string
   steps:
+  - name: helm-install-tools-operators
+    script: >
+      helm install -n=default
+      --repo https://kuadrant.io/helm-charts-olm
+      --wait --debug
+      tools-operators
+      tools-operators
+    env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    imagePullPolicy: Always
+  - name: helm-install-tools-instances
+    script: >
+      helm install -n=default
+      --repo https://kuadrant.io/helm-charts-olm
+      --wait --debug --timeout=10m0s
+      tools-instances
+      tools-instances
+    env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    imagePullPolicy: Always
   - name: helm-install-operators
     script: >
       helm install -n=default
@@ -72,30 +96,6 @@ spec:
     volumeMounts:
       - mountPath: /mount/values-additional-manifests
         name: values-additional-manifests
-    env:
-      - name: KUBECONFIG
-        value: $(params.kubeconfig-path)
-    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
-    imagePullPolicy: Always
-  - name: helm-install-tools-operators
-    script: >
-      helm install -n=default
-      --repo https://kuadrant.io/helm-charts-olm
-      --wait --debug
-      tools-operators
-      tools-operators
-    env:
-      - name: KUBECONFIG
-        value: $(params.kubeconfig-path)
-    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
-    imagePullPolicy: Always
-  - name: helm-install-tools-instances
-    script: >
-      helm install -n=default
-      --repo https://kuadrant.io/helm-charts-olm
-      --wait --debug --timeout=10m0s
-      tools-instances
-      tools-instances
     env:
       - name: KUBECONFIG
         value: $(params.kubeconfig-path)

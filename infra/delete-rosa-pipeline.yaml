@@ -17,7 +17,7 @@ spec:
       description: 'What OCM instance to use, either ''staging'' or ''production'''
       name: ocm-instance
       type: string
-    - description: ROSA cluster ID that is to be deleted
+    - description: ROSA cluster name that is to be deleted
       name: cluster-name
       type: string
   tasks:

@@ -19,6 +19,8 @@ spec:
       type: string
     - name: operator-name
       type: string
+    - name: provision-cluster
+      type: string
   results:
     - name: provider-credentials
       description: Credentials for cloud provider
@@ -48,9 +50,11 @@ spec:
         cmd_flags="$(params.create-cmd-flags)"
 
         # fail early if secret already exists
-        if kubectl get secret "$(params.cluster-name)-credentials" -n "$NAMESPACE" &>/dev/null; then
-          echo "Secret '$(params.cluster-name)-credentials' already exists in namespace '$NAMESPACE'. This indicates that a cluster with the same name already exists. Please use a different cluster name, or verify that no such cluster is present and remove the associated secret manually"
-          exit 1
+        if [[ "$(params.provision-cluster)" == "true" ]]; then
+            if kubectl get secret "$(params.cluster-name)-credentials" -n "$NAMESPACE" &>/dev/null; then
+              echo "Secret '$(params.cluster-name)-credentials' already exists in namespace '$NAMESPACE'. This indicates that a cluster with the same name already exists. Please use a different cluster name, or verify that no such cluster is present and remove the associated secret manually"
+              exit 1
+            fi
         fi
 
         # make sure proper defaults are used if provider credentials are not specified

@@ -45,6 +45,8 @@ spec:
           value: $(params.create-cmd-flags)
         - name: cluster-name
           value: $(params.cluster-name)
+        - name: provision-cluster
+          value: true
       taskRef:
         kind: Task
         name: provision-osd-aws
@@ -67,6 +69,8 @@ spec:
       params:
         - name: cluster-id
           value: $(tasks.provision-osd-aws.results.cluster-id)
+        - name: provision-cluster
+          value: true
       taskRef:
         kind: Task
         name: get-osd-credentials
