@@ -1,0 +1,347 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: release
+spec:
+  params:
+    - default: 'quay.io/kuadrant/testsuite:unstable'
+      description: Testsuite image to run tests on
+      name: testsuite-image
+      type: string
+    - description: API URL of the Openshift cluster
+      name: kube-api
+      type: string
+    - description: Secret name with cluster credentials
+      name: cluster-credentials
+      type: string
+      default: openshift-pipelines-credentials
+    - default: kuadrant
+      description: Name of the Openshift project
+      name: project
+      type: string
+    - default: all
+      description: Makefile target for tests (doesn't affect nightly/release pipelines, kept for compatibility)
+      name: make-target
+      type: string
+    - default: ""
+      description: Pytest flags to use with Make (flags="${pytest-flags}" make kuadrant)
+      name: pytest-flags
+      type: string
+    - default: pipeline-settings
+      description: Config Map with settings for the testsuite
+      name: settings-cm
+      type: string
+    - default: ""
+      description: Additional env for testsuite container separated with spaces (e.g. KUADRANT_CONTROL_PLANE__provider_secret=gcp-credentials KUADRANT_KEYCLOAK__url="https://my-sso.net")
+      name: additional-env
+      type: string
+    - description: API URL of the second Openshift cluster for multi-cluster tests
+      name: kube-api-second
+      type: string
+    - default: rhcl
+      description: Prefix of the launch name saved in report portal (nightly, username, manual, etc.). In case of release candidate testing use kuadrant-v<version>, rhcl-v<version>, or authorino-v<version>
+      name: launch-name
+      type: string
+    - default: ""
+      description: Optional launch description for Report Portal
+      name: launch-description
+      type: string
+    - default: testsuite
+      description: Report Portal Project to store test results (e.g. testsuite, nightly-testsuite)
+      name: rp-project
+      type: string
+    - default: true
+      description: Upload test results to Report Portal
+      name: upload-results
+      type: string
+  tasks:
+    - name: kubectl-login
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: kube-api
+          value: $(params.kube-api)
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
+      taskRef:
+        kind: Task
+        name: kubectl-login
+      workspaces:
+        - name: shared-workspace
+
+    - name: run-tests-smoke-1
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: smoke
+        - name: pytest-flags
+          value: $(params.pytest-flags)
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: additional-env
+          value: $(params.additional-env)
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
+      runAfter:
+        - kubectl-login
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+
+    - name: run-tests-kuadrant
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: kuadrant
+        - name: pytest-flags
+          value: $(params.pytest-flags)
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: additional-env
+          value: $(params.additional-env)
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
+      runAfter:
+        - run-tests-smoke-1
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+
+    - name: kubectl-login-second-cluster
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: kube-api
+          value: $(params.kube-api-second)
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
+      taskRef:
+        kind: Task
+        name: kubectl-login
+      workspaces:
+        - name: shared-workspace
+
+    - name: run-tests-smoke-2
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: smoke
+        - name: pytest-flags
+          value: $(params.pytest-flags)
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: additional-env
+          value: $(params.additional-env)
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login-second-cluster.results.kubeconfig-path)
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
+      runAfter:
+        - kubectl-login-second-cluster
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+
+    - name: run-tests-authorino-standalone
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: authorino-standalone
+        - name: pytest-flags
+          value: $(params.pytest-flags)
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: additional-env
+          value: $(params.additional-env)
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login-second-cluster.results.kubeconfig-path)
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
+      runAfter:
+        - run-tests-smoke-2
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+
+    - name: run-tests-multicluster
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: project
+          value: $(params.project)
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: make-target
+          value: multicluster
+        - name: pytest-flags
+          value: $(params.pytest-flags)
+        - name: additional-env
+          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path)'
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
+      runAfter:
+        - run-tests-kuadrant
+        - run-tests-authorino-standalone
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+
+    - name: run-tests-dnstls-gcp
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: dnstls
+        - name: pytest-flags
+          value: "$(params.pytest-flags) --junitxml=$(workspaces.shared-workspace.path)/junit-dnstls-gcp.xml -o junit_suite_name=dnstls-gcp"
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: additional-env
+          value: "$(params.additional-env) KUADRANT_CONTROL_PLANE__provider_secret=gcp-credentials"
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
+      runAfter:
+        - run-tests-multicluster
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+
+    - name: run-tests-dnstls-azure
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: dnstls
+        - name: pytest-flags
+          value: "$(params.pytest-flags) --junitxml=$(workspaces.shared-workspace.path)/junit-dnstls-azure.xml -o junit_suite_name=dnstls-azure"
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: additional-env
+          value: "$(params.additional-env) KUADRANT_CONTROL_PLANE__provider_secret=azure-credentials"
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login-second-cluster.results.kubeconfig-path)
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
+      runAfter:
+        - run-tests-multicluster
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+
+    - name: run-tests-multicluster-gcp
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: project
+          value: $(params.project)
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: make-target
+          value: multicluster
+        - name: pytest-flags
+          value: "$(params.pytest-flags) --junitxml=$(workspaces.shared-workspace.path)/junit-multicluster-gcp.xml -o junit_suite_name=multicluster-gcp"
+        - name: additional-env
+          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path) KUADRANT_CONTROL_PLANE__provider_secret=gcp-credentials KUADRANT_DNS__dns_server__geo_code=us-central1 KUADRANT_DNS__dns_server2__geo_code=europe-central2'
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
+      runAfter:
+        - run-tests-dnstls-gcp
+        - run-tests-dnstls-azure
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+
+    - name: run-tests-multicluster-azure
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: project
+          value: $(params.project)
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: make-target
+          value: multicluster
+        - name: pytest-flags
+          value: "$(params.pytest-flags) --junitxml=$(workspaces.shared-workspace.path)/junit-multicluster-azure.xml -o junit_suite_name=multicluster-azure"
+        - name: additional-env
+          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path) KUADRANT_CONTROL_PLANE__provider_secret=azure-credentials KUADRANT_DNS__dns_server__geo_code=GEO-NA KUADRANT_DNS__dns_server2__geo_code=GEO-EU'
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
+      runAfter:
+        - run-tests-multicluster-gcp
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+
+  finally:
+    - name: upload-results
+      when:
+        - input: $(params.upload-results)
+          operator: in
+          values: ["true"]
+      params:
+        - name: launch-name
+          value: $(params.launch-name)
+        - name: launch-description
+          value: $(params.launch-description)
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: make-target
+          value: all
+        - name: rp-project
+          value: $(params.rp-project)
+        - name: ocp-version
+          value: $(tasks.kubectl-login.results.ocp-version)
+      taskRef:
+        kind: Task
+        name: upload-results
+      workspaces:
+        - name: shared-workspace
+  workspaces:
+    - name: shared-workspace
