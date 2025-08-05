@@ -12,3 +12,4 @@ resources:
   - pipeline.yaml
   - provision-install-test-pipeline.yaml
   - provision-upgrade-test-pipeline.yaml
+  - aro-provision-install-test-pipeline.yaml
