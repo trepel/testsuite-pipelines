@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - parameter-sanity-check-task.yaml
   - upgrade-to-latest-task.yaml
+  - operator-pod-restart-task.yaml
