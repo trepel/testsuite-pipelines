@@ -380,6 +380,18 @@ spec:
       workspaces:
         - name: shared-workspace
           workspace: shared-workspace
+    - name: operator-pod-restart
+      params:
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+      runAfter:
+        - helm-install
+      taskRef:
+        kind: Task
+        name: operator-pod-restart
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
     - name: run-tests-pre-upgrade
       params:
         - name: testsuite-image
@@ -399,7 +411,7 @@ spec:
         - name: cluster-credentials
           value: $(tasks.get-osd-credentials.results.credentials-secret)
       runAfter:
-        - helm-install
+        - operator-pod-restart
       taskRef:
         kind: Task
         name: run-tests
