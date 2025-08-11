@@ -26,13 +26,17 @@ spec:
       name: operator-name
       type: string
     - description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'"
-      name: helm-install-flags
+      name: additional-helm-flags
+      type: string
+    - description: Additional flags for tools helm, example '--set=tools.keycloak.keycloakProvider=deployment --set=tools.valkey.enable=false'"
+      name: additional-helm-tools-flags
       type: string
   steps:
   - name: helm-install-tools-operators
     script: >
       helm install -n=default
       --repo https://kuadrant.io/helm-charts-olm
+      $(params.additional-helm-tools-flags)
       --wait --debug
       tools-operators
       tools-operators
@@ -45,6 +49,7 @@ spec:
     script: >
       helm install -n=default
       --repo https://kuadrant.io/helm-charts-olm
+      $(params.additional-helm-tools-flags)
       --wait --debug --timeout=10m0s
       tools-instances
       tools-instances
@@ -65,7 +70,7 @@ spec:
       --set=gatewayAPI.version="$(params.gateway-crd)"
       --set=tools.keycloak.operator.channel="$(params.keycloak-channel)"
       --set=tools.enabled=true
-      $(params.helm-install-flags)
+      $(params.additional-helm-flags)
       --wait --debug
       kuadrant-operators
       kuadrant-operators
@@ -89,7 +94,7 @@ spec:
       --set=gatewayAPI.version="$(params.gateway-crd)"
       --set=tools.keycloak.operator.channel="$(params.keycloak-channel)"
       --set=tools.enabled=true
-      $(params.helm-install-flags)
+      $(params.additional-helm-flags)
       --wait --debug
       kuadrant-instances
       kuadrant-instances
