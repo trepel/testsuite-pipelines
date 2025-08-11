@@ -28,7 +28,11 @@ spec:
     type: string
     default: stable-v26
   - description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
-    name: helm-install-flags
+    name: additional-helm-flags
+    type: string
+    default: ' '
+  - description: Additional flags for tools helm, example '--set=tools.keycloak.keycloakProvider=deployment --set=tools.valkey.enable=false'"
+    name: additional-helm-tools-flags
     type: string
     default: ' '
   tasks:
@@ -88,8 +92,10 @@ spec:
         value: $(params.operator-name)
       - name: kubeconfig-path
         value: $(tasks.kubectl-login.results.kubeconfig-path)
-      - name: helm-install-flags
-        value: $(params.helm-install-flags)
+      - name: additional-helm-flags
+        value: $(params.additional-helm-flags)
+      - name: additional-helm-tools-flags
+        value: $(params.additional-helm-tools-flags)
     runAfter:
     - helm-uninstall
     taskRef:
