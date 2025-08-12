@@ -62,9 +62,13 @@ spec:
       description: Keycloak subscription channel
       name: keycloak-channel
       type: string
-    - default: '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=rhcl-operator.v1.1.0'
-      description: Additional flags for helm install command, specify desired 'upgrade from' version"
-      name: helm-install-flags
+    - default: ' '
+      description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
+      name: additional-helm-flags
+      type: string
+    - default: ' '
+      description: Additional flags for tools helm, example '--set=tools.keycloak.keycloakProvider=deployment --set=tools.valkey.enable=false'"
+      name: additional-helm-tools-flags
       type: string
 # Testsuite related parameters
     - default: 'quay.io/kuadrant/testsuite:unstable'
@@ -96,12 +100,12 @@ spec:
       name: additional-env
       type: string
 # Report Portal related parameters
-    - default: pipeline
+    - default: full-cycle-upgrade
       description: Prefix of the launch name saved in report portal (nightly, username, manual, etc.). In case of release candidate testing use kuadrant-v<version>, rhcl-v<version>, or authorino-v<version>
       name: launch-name
       type: string
-    - default: 'Pipeline'
-      description: Launch description for Report Portal
+    - default: ' '
+      description: Optional launch description for Report Portal
       name: launch-description
       type: string
     - default: testsuite
@@ -300,8 +304,6 @@ spec:
       params:
         - name: index-image
           value: $(params.index-image)
-      runAfter:
-        - wait-for-valid-certificates
       taskRef:
         kind: Task
         name: check-image-existence
@@ -369,8 +371,10 @@ spec:
           value: $(params.gateway-crd)
         - name: keycloak-channel
           value: $(params.keycloak-channel)
-        - name: helm-install-flags
-          value: $(params.helm-install-flags)
+        - name: additional-helm-flags
+          value: $(params.additional-helm-flags)
+        - name: additional-helm-tools-flags
+          value: $(params.additional-helm-tools-flags)
       runAfter:
         - helm-uninstall
         - prepare-for-rhcl-rc-install
