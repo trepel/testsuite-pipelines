@@ -15,6 +15,8 @@ spec:
       type: string
     - name: location
       type: string
+    - name: provision-cluster
+      type: string
   results:
     - name: password
       description: kubeadmin password
@@ -24,6 +26,8 @@ spec:
       description: console URL of the cluster
     - name: login-command
       description: full login command
+    - name: credentials-secret
+      description: secret name with credentials
   steps:
     - computeResources:
         limits:
@@ -55,6 +59,10 @@ spec:
             secretKeyRef:
               key: .dockerconfigjson
               name: $(params.aro-pull-secret)
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
       image: quay.io/kuadrant/testsuite-pipelines-tools:latest
       imagePullPolicy: Always
       name: provision-aro
@@ -75,8 +83,16 @@ spec:
         echo "Set subscription"
         az account set --subscription "$SUBSCRIPTION_ID"
 
+        # determine what version to use if not specified
+        version=""
+        if [[ "$(params.create-cmd-flags)" != *"--version"* ]]; then
+          version=" --version=$(az aro get-versions --location $LOCATION | jq -r '.[-1]')"
+        fi
+
         echo "Create Resource Group"
-        az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --tags 'owner=kua-pipeline'
+        if [[ "$(params.provision-cluster)" == "true" ]]; then
+            az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --tags 'owner=kua-pipeline'
+        fi
 
         # Register required providers
         az provider register -n "Microsoft.RedHatOpenShift" --wait
@@ -90,17 +106,25 @@ spec:
         az provider register -n "Microsoft.Storage" --wait
 
         echo "Create Virtual Network"
-        az network vnet create -g "$RESOURCE_GROUP" -n "$VNET_NAME" --address-prefixes 10.0.0.0/22 --tags 'owner=kua-pipeline'
+        if [[ "$(params.provision-cluster)" == "true" ]]; then
+            az network vnet create -g "$RESOURCE_GROUP" -n "$VNET_NAME" --address-prefixes 10.0.0.0/22 --tags 'owner=kua-pipeline'
+        fi
 
         echo "Create Subnets"
-        az network vnet subnet create -g "$RESOURCE_GROUP" --vnet-name "$VNET_NAME" -n "$MASTER_SUBNET" --address-prefixes 10.0.0.0/23 --service-endpoints Microsoft.ContainerRegistry
-        az network vnet subnet create -g "$RESOURCE_GROUP" --vnet-name "$VNET_NAME" -n "$WORKER_SUBNET" --address-prefixes 10.0.2.0/23 --service-endpoints Microsoft.ContainerRegistry
+        if [[ "$(params.provision-cluster)" == "true" ]]; then
+            az network vnet subnet create -g "$RESOURCE_GROUP" --vnet-name "$VNET_NAME" -n "$MASTER_SUBNET" --address-prefixes 10.0.0.0/23 --service-endpoints Microsoft.ContainerRegistry
+            az network vnet subnet create -g "$RESOURCE_GROUP" --vnet-name "$VNET_NAME" -n "$WORKER_SUBNET" --address-prefixes 10.0.2.0/23 --service-endpoints Microsoft.ContainerRegistry
+        fi
 
         echo "Disable subnet private link service network policies"
-        az network vnet subnet update -g "$RESOURCE_GROUP" --vnet-name "$VNET_NAME" -n "$MASTER_SUBNET" --private-link-service-network-policies Disabled
+        if [[ "$(params.provision-cluster)" == "true" ]]; then
+            az network vnet subnet update -g "$RESOURCE_GROUP" --vnet-name "$VNET_NAME" -n "$MASTER_SUBNET" --private-link-service-network-policies Disabled
+        fi
 
         echo "Create the ARO Cluster"
-        az aro create -g "$RESOURCE_GROUP" -n "$CLUSTER_NAME" --location "$LOCATION" --pull-secret "$PULL_SECRET" --master-subnet "$MASTER_SUBNET" --worker-subnet "$WORKER_SUBNET" --vnet "$VNET_NAME" --client-id "$APP_ID" --client-secret "$PASSWORD" --debug $(params.create-cmd-flags)
+        if [[ "$(params.provision-cluster)" == "true" ]]; then
+            az aro create -g "$RESOURCE_GROUP" -n "$CLUSTER_NAME" --location "$LOCATION" --pull-secret "$PULL_SECRET" --master-subnet "$MASTER_SUBNET" --worker-subnet "$WORKER_SUBNET" --vnet "$VNET_NAME" --client-id "$APP_ID" --client-secret "$PASSWORD" --debug $(params.create-cmd-flags) $version
+        fi
 
         echo "Get cluster info"
         username=$(az aro list-credentials -g "$RESOURCE_GROUP" -n "$CLUSTER_NAME" | jq -r '.kubeadminUsername')
@@ -118,3 +142,8 @@ spec:
 
         echo -n $login_cmd | tee $(results.login-command.path) && echo ""
 
+        # Create secret with cluster credentials
+        echo -n "${CLUSTER_NAME}-credentials" | tee $(results.credentials-secret.path)
+        if [[ "$(params.provision-cluster)" == "true" ]]; then
+            kubectl create secret generic "${CLUSTER_NAME}-credentials" --from-literal=KUBE_USER="$username" --from-literal=KUBE_PASSWORD="$password" -n ${NAMESPACE}
+        fi
