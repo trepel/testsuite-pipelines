@@ -55,8 +55,8 @@ spec:
         # wait for global pull secret change to get applied on all nodes
         if [[ "$patch_status" != *"no change"* ]]; then
             kubectl wait --for=condition=Updating --timeout=60s mcp/worker
-            kubectl wait --for=condition=Updated --timeout=600s mcp/master
-            kubectl wait --for=condition=Updated --timeout=300s mcp/worker
+            kubectl wait --for=condition=Updated --timeout=1200s mcp/master
+            kubectl wait --for=condition=Updated --timeout=600s mcp/worker
             update_finished=$(kubectl get mcp -o json | jq -r '([ .items[] |
                 select(
                   (.status.conditions[] | select(.type=="Updated").status == "True") and

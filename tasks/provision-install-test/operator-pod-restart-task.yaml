@@ -1,0 +1,46 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: operator-pod-restart
+spec:
+  description: Restart Kuadrant/RHCL operator pod to make sure everything gets reconciled successfully
+  params:
+    - name: kubeconfig-path
+      type: string
+  steps:
+    - computeResources:
+        limits:
+          cpu: '100m'
+          memory: 128Mi
+      env:
+        - name: KUBECONFIG
+          value: $(params.kubeconfig-path)
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      name: operator-pod-restart
+      script: |
+        #!/usr/bin/env bash
+        set -evo pipefail
+
+        # Get the namespace of the Subscription (typically kuadrant-system but it can be different)
+        namespace=$(kubectl get subscription --all-namespaces -o json | jq -r '.items[] | select(.metadata.name == "kuadrant-operator") | .metadata.namespace')
+        if [[ -z "$namespace" ]]; then
+            echo "Subscription 'kuadrant-operator' not found in any namespace."
+            exit 1
+        fi
+
+        # Delete the operator Pod
+        pod_count=$(kubectl get pods -l app=kuadrant -o jsonpath='{.items[*].metadata.name}' -n $namespace | wc -w)
+        if [[ $pod_count -ne 1 ]]; then
+            echo "Expected exactly 1 pod, found $pod_count"
+            exit 1
+        fi
+        pod_name=$(kubectl get pods -l app=kuadrant -o jsonpath='{.items[0].metadata.name}' -n $namespace)
+        kubectl delete pod $pod_name --wait=true --timeout=60s -n $namespace
+
+        # Wait for the new Pod to get up and running
+        pod_name=$(kubectl get pods -l app=kuadrant -o jsonpath='{.items[0].metadata.name}' -n $namespace)
+        kubectl wait --for=condition=Ready pod/$pod_name --timeout=120s -n $namespace
+  workspaces:
+    - name: shared-workspace
+
