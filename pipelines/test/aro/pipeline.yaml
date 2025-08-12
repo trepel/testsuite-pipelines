@@ -1,0 +1,347 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: test-aro
+spec:
+  params:
+# Cluster related parameters
+    - default: true
+      description: 'If not set to "true" then existing cluster will be used. The cluster must be created via OCM/HCC.'
+      name: provision-cluster
+      type: string
+    - default: kua-azure-credentials
+      description: Name of secret that contains credentials for Azure Service Principal
+      name: azure-credentials
+      type: string
+    - default: aro-pull-secret
+      description: Pull secret for ARO
+      name: aro-pull-secret
+      type: string
+    - default: kua-aro
+      description: ARO cluster name
+      name: cluster-name
+      type: string
+    - default: eastus
+      description: Location for the cluster (region)
+      name: location
+      type: string
+    - default: '--master-vm-size Standard_D8s_v3 --worker-vm-size Standard_D4s_v3 --worker-count 3 --worker-vm-disk-size-gb 128 --pod-cidr 10.128.0.0/14 --service-cidr 172.30.0.0/16 --tags owner=kua-pipeline --debug'
+      description: 'Flags to be used for `az aro create cluster` command. Do not provide resource group (-g), cluster name (-n), location, pull-secret, master-subnet, worker-subnet, vnet, client-id, client-secret flags here.'
+      name: create-cmd-flags
+      type: string
+# Kuadrant/RHCL installation related parameters
+    - default: quay.io/kuadrant/kuadrant-operator-catalog:v1.2.0
+      description: Kuadrant/RHCL index image, leave empty to install current RHCL GA
+      name: index-image
+      type: string
+    - default: stable
+      description: Kuadrant channel (stable, preview)
+      name: channel
+      type: string
+    - default: kuadrant-operator
+      description: Operator name (kuadrant-operator, rhcl-operator)
+      name: operator-name
+      type: string
+    - default: ocp
+      description: Istio provider (ossm3, ocp), use ossm3 for OCP v4.18 and before
+      name: istio-provider
+      type: string
+    - default: ""
+      description: GatewayAPI CRD version. v1.0.0, v1.1.0, v1.2.1, v1.3.0 available; Leave empty if installing on OCP v4.19+
+      name: gateway-crd
+      type: string
+    - default: stable-v26
+      description: Keycloak subscription channel
+      name: keycloak-channel
+      type: string
+    - default: ""
+      description: Extensions binary image
+      name: extensions-binary-image
+      type: string
+    - default: ""
+      description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
+      name: additional-helm-flags
+      type: string
+    - default: ""
+      description: Additional flags for tools helm, example '--set=tools.keycloak.keycloakProvider=deployment --set=tools.valkey.enable=false'"
+      name: additional-helm-tools-flags
+      type: string
+# Testsuite related parameters
+    - default: 'quay.io/kuadrant/testsuite:unstable'
+      description: Testsuite image
+      name: testsuite-image
+      type: string
+    - default: kuadrant
+      description: Openshift project
+      name: project
+      type: string
+    - default: test
+      description: Makefile target for tests
+      name: make-target
+      type: string
+    - default: ""
+      description: Pytest flags to use with Make (flags="${pytest-flags}" make kuadrant)
+      name: pytest-flags
+      type: string
+    - default: pipeline-settings
+      description: Config Map with settings for the testsuite
+      name: settings-cm
+      type: string
+    - default: ""
+      description: Additional env for testsuite container separated with spaces (e.g. KUADRANT_CONTROL_PLANE__provider_secret=gcp-credentials KUADRANT_KEYCLOAK__url="https://my-sso.net")
+      name: additional-env
+      type: string
+# Report Portal related parameters
+    - default: full-cycle-aro
+      description: Prefix of the launch name saved in report portal (nightly, username, manual, etc.). In case of release candidate testing use kuadrant-v<version>, rhcl-v<version>, or authorino-v<version>
+      name: launch-name
+      type: string
+    - default: ""
+      description: Optional launch description for Report Portal
+      name: launch-description
+      type: string
+    - default: testsuite
+      description: Report Portal Project to store test results (testsuite or nightly-testsuite typically)
+      name: rp-project
+      type: string
+    - default: true
+      description: If set to 'true' upload test results to Report Portal
+      name: upload-results
+      type: string
+# Cleanup
+    - default: false
+      description: If set to 'true' cleanup will be done
+      name: cleanup
+      type: string
+  workspaces:
+    - name: shared-workspace
+  tasks:
+    - name: provision-aro
+      params:
+        - name: azure-credentials
+          value: $(params.azure-credentials)
+        - name: create-cmd-flags
+          value: $(params.create-cmd-flags)
+        - name: cluster-name
+          value: $(params.cluster-name)
+        - name: aro-pull-secret
+          value: $(params.aro-pull-secret)
+        - name: location
+          value: $(params.location)
+        - name: provision-cluster
+          value: $(params.provision-cluster)
+      taskRef:
+        kind: Task
+        name: provision-aro
+    - name: wait-for-valid-certificates
+      params:
+        - name: console-url
+          value: $(tasks.provision-aro.results.console-url)
+        - name: api-url
+          value: $(tasks.provision-aro.results.api-url)
+      taskRef:
+        kind: Task
+        name: wait-for-valid-certificates
+      runAfter:
+        - provision-aro
+      workspaces:
+        - name: shared-workspace
+    - name: check-image-existence
+      when:
+        - input: "$(params.index-image)"
+          operator: notin
+          values: ['']
+      params:
+        - name: index-image
+          value: $(params.index-image)
+      taskRef:
+        kind: Task
+        name: check-image-existence
+    - name: kubectl-login
+      params:
+        - name: kube-api
+          value: $(tasks.provision-aro.results.api-url)
+        - name: testsuite-image
+          value: 'quay.io/kuadrant/testsuite-pipelines-tools:latest'
+        - name: cluster-credentials
+          value: $(tasks.provision-aro.results.credentials-secret)
+      runAfter:
+        - wait-for-valid-certificates
+      taskRef:
+        kind: Task
+        name: kubectl-login
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: helm-uninstall
+      params:
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+      runAfter:
+        - kubectl-login
+        - check-image-existence
+      taskRef:
+        kind: Task
+        name: helm-uninstall
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: prepare-for-rhcl-rc-install
+      when:
+        - input: "$(params.operator-name)"
+          operator: in
+          values: ['rhcl-operator']
+        - input: "$(params.index-image)"
+          operator: notin
+          values: ['']
+      params:
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+      runAfter:
+        - helm-uninstall
+      taskRef:
+        kind: Task
+        name: prepare-for-rhcl-rc-install
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: helm-install
+      params:
+        - name: index-image
+          value: $(params.index-image)
+        - name: channel
+          value: $(params.channel)
+        - name: istio-provider
+          value: $(params.istio-provider)
+        - name: operator-name
+          value: $(params.operator-name)
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+        - name: gateway-crd
+          value: $(params.gateway-crd)
+        - name: keycloak-channel
+          value: $(params.keycloak-channel)
+        - name: extensions-binary-image
+          value: $(params.extensions-binary-image)
+        - name: additional-helm-flags
+          value: $(params.additional-helm-flags)
+        - name: additional-helm-tools-flags
+          value: $(params.additional-helm-tools-flags)
+      runAfter:
+        - helm-uninstall
+        - prepare-for-rhcl-rc-install
+      taskRef:
+        kind: Task
+        name: helm-install
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: operator-pod-restart
+      params:
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+      runAfter:
+        - helm-install
+      taskRef:
+        kind: Task
+        name: operator-pod-restart
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: run-tests
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: $(params.make-target)
+        - name: pytest-flags
+          value: $(params.pytest-flags)
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: additional-env
+          value: $(params.additional-env)
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+        - name: cluster-credentials
+          value: $(tasks.provision-aro.results.credentials-secret)
+      runAfter:
+        - operator-pod-restart
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+    - name: upload-results
+      when:
+        - input: $(params.upload-results)
+          operator: in
+          values: ["true"]
+      params:
+        - name: launch-name
+          value: $(params.launch-name)
+        - name: launch-description
+          value: $(params.launch-description)
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: make-target
+          value: $(params.make-target)
+        - name: rp-project
+          value: $(params.rp-project)
+        - name: ocp-version
+          value: $(tasks.kubectl-login.results.ocp-version)
+      runAfter:
+        - run-tests
+      taskRef:
+        kind: Task
+        name: upload-results
+      workspaces:
+        - name: shared-workspace
+    - name: helm-uninstall-cleanup
+      when:
+        - input: $(params.cleanup)
+          operator: in
+          values: ["true"]
+      params:
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+      runAfter:
+        - upload-results
+        - run-tests
+      taskRef:
+        kind: Task
+        name: helm-uninstall
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: delete-aro
+      when:
+        - input: $(params.cleanup)
+          operator: in
+          values: ["true"]
+      params:
+        - name: cluster-name
+          value: $(params.cluster-name)
+        - name: azure-credentials
+          value: $(params.azure-credentials)
+      runAfter:
+        - helm-uninstall-cleanup
+      taskRef:
+        kind: Task
+        name: delete-aro
+      workspaces:
+        - name: shared-workspace
+    - name: cluster-secret-cleanup
+      when:
+        - input: $(params.cleanup)
+          operator: in
+          values: ["true"]
+      params:
+        - name: cluster-name
+          value: $(params.cluster-name)
+      runAfter:
+        - helm-uninstall-cleanup
+      taskRef:
+        kind: Task
+        name: cluster-secret-cleanup

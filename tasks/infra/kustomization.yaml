@@ -1,20 +1,23 @@
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
 
 resources:
-  - ocm-login-task.yaml
-  - provision-osd-aws-task.yaml
-  - wait-till-osd-is-ready-task.yaml
-  - get-osd-credentials-task.yaml
-  - delete-osd-task.yaml
-  - wait-till-osd-is-deleted-task.yaml
-  - provision-osd-gcp-task.yaml
-  - wait-for-valid-certificates-task.yaml
-  - rosa-login-task.yaml
-  - provision-rosa-task.yaml
-  - delete-rosa-task.yaml
-  - prepare-for-rhcl-rc-install-task.yaml
-  - provision-aro-task.yaml
-  - delete-aro-task.yaml
-  - get-cluster-id-task.yaml
-  - cluster-secret-cleanup-task.yaml
+  - cluster-secret-cleanup.yaml
+  - delete-aro.yaml
+  - delete-osd.yaml
+  - delete-rosa.yaml
+  - get-cluster-id.yaml
+  - get-osd-credentials.yaml
+  - ocm-login.yaml
+  - operator-pod-restart.yaml
+  - parameter-sanity-check.yaml
+  - prepare-for-rhcl-rc-install.yaml
+  - provision-aro.yaml
+  - provision-osd-aws.yaml
+  - provision-osd-gcp.yaml
+  - provision-rosa.yaml
+  - rosa-login.yaml
+  - upgrade-to-latest.yaml
+  - wait-for-valid-certificates.yaml
+  - wait-till-osd-is-deleted.yaml
+  - wait-till-osd-is-ready.yaml

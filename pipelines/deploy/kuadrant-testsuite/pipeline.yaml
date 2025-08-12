@@ -1,0 +1,116 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: deploy-kuadrant
+spec:
+  params:
+  - description: API URL of the Openshift cluster
+    name: kube-api
+    type: string
+  - description: Secret name with cluster credentials
+    name: cluster-credentials
+    type: string
+    default: openshift-pipelines-credentials
+  - description: Kuadrant image url
+    name: index-image
+    type: string
+    default: quay.io/kuadrant/kuadrant-operator-catalog:v1.2.0
+  - description: Kuadrant image channel. Can be 'preview' for nightlies and 'stable' for releases
+    name: channel
+    type: string
+    default: stable
+  - description: Kuadrant operator name. 'kuadrant-operator' or 'rhcl-operator'
+    name: operator-name
+    type: string
+    default: kuadrant-operator
+  - description: A 'ossm3' for Openshift Service mesh v3, 'ocp' for installing on Openshift 4.19+
+    name: istio-provider
+    type: string
+    default: ossm3
+  - description: GatewayAPI CRD version. v1.0.0, v1.1.0, v1.2.1, v1.3.0 available; Leave empty if installing on ocp4.19+
+    name: gateway-crd
+    type: string
+    default: v1.3.0
+  - description: Keycloak subscription channel
+    name: keycloak-channel
+    type: string
+    default: stable-v26
+  - description: Extensions binary image
+    name: extensions-binary-image
+    type: string
+    default: ""
+  - description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
+    name: additional-helm-flags
+    type: string
+    default: ""
+  - description: Additional flags for tools helm, example '--set=tools.keycloak.keycloakProvider=deployment --set=tools.valkey.enable=false'"
+    name: additional-helm-tools-flags
+    type: string
+    default: ""
+  tasks:
+  - name: check-image-existence
+    params:
+      - name: index-image
+        value: $(params.index-image)
+    taskRef:
+      kind: Task
+      name: check-image-existence
+  - name: kubectl-login
+    params:
+    - name: kube-api
+      value: $(params.kube-api)
+    - name: testsuite-image
+      value: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    - name: cluster-credentials
+      value: $(params.cluster-credentials)
+    taskRef:
+      kind: Task
+      name: kubectl-login
+    workspaces:
+    - name: shared-workspace
+      workspace: shared-workspace
+  - name: helm-uninstall
+    params:
+      - name: kubeconfig-path
+        value: $(tasks.kubectl-login.results.kubeconfig-path)
+    runAfter:
+    - kubectl-login
+    - check-image-existence
+    taskRef:
+      kind: Task
+      name: helm-uninstall
+    workspaces:
+    - name: shared-workspace
+      workspace: shared-workspace
+  - name: helm-install
+    params:
+      - name: index-image
+        value: $(params.index-image)
+      - name: channel
+        value: $(params.channel)
+      - name: istio-provider
+        value: $(params.istio-provider)
+      - name: gateway-crd
+        value: $(params.gateway-crd)
+      - name: keycloak-channel
+        value: $(params.keycloak-channel)
+      - name: operator-name
+        value: $(params.operator-name)
+      - name: extensions-binary-image
+        value: $(params.extensions-binary-image)
+      - name: kubeconfig-path
+        value: $(tasks.kubectl-login.results.kubeconfig-path)
+      - name: additional-helm-flags
+        value: $(params.additional-helm-flags)
+      - name: additional-helm-tools-flags
+        value: $(params.additional-helm-tools-flags)
+    runAfter:
+    - helm-uninstall
+    taskRef:
+      kind: Task
+      name: helm-install
+    workspaces:
+    - name: shared-workspace
+      workspace: shared-workspace
+  workspaces:
+  - name: shared-workspace
