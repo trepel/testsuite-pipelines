@@ -121,11 +121,14 @@ kubectl patch tektonconfig config --type=merge -p '{"spec":{"pruner":{"disabled"
 
 Pipeline image
 ---
-If `Dockerfile` has been modified:
-```shel
-podman build -t quay.io/kuadrant/testsuite-pipelines-tools:latest --no-cache .
-podman push quay.io/kuadrant/testsuite-pipelines-tools:latest
+If `Dockerfile` or `init.container.sh` has been modified,
+install [docker buildx](https://github.com/docker/buildx)
+(note: also install QEMU packages), be sure you are logged in quay.io and run:
+
+```shell
+TAG=0.x docker buildx bake 
 ```
 
-Only members of [QE Team](https://quay.io/organization/kuadrant/teams/qe) and `kuadrant+qe` robot account are allowed to do the push.
+Set the TAG env variable to an increment of the last version in https://quay.io/repository/kuadrant/testsuite-pipelines-tools?tab=tags
 
+Only members of [QE Team](https://quay.io/organization/kuadrant/teams/qe) and `kuadrant+qe` robot account are allowed to do the push.
