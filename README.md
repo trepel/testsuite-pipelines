@@ -121,14 +121,41 @@ kubectl patch tektonconfig config --type=merge -p '{"spec":{"pruner":{"disabled"
 
 Pipeline image
 ---
-If `Dockerfile` or `init.container.sh` has been modified,
-install [docker buildx](https://github.com/docker/buildx)
+If `Dockerfile` or `init.container.sh` has been modified, use either `podman` or `docker` to rebuild it.
+
+Set the TAG env variable to an increment of the last version in https://quay.io/repository/kuadrant/testsuite-pipelines-tools?tab=tags
+
+Only members of [QE Team](https://quay.io/organization/kuadrant/teams/qe) and `kuadrant+qe` robot account are allowed to do the push.
+
+### Podman
+You might need to install QEMU User Static Emulation and enable Binary Format Support.
+```shell
+# Fedora example
+sudo dnf install qemu-user-static
+sudo systemctl start systemd-binfmt.service
+```
+
+It is also possible to use container:
+```shell
+podman run --rm --privileged mirror.gcr.io/multiarch/qemu-user-static --reset -p yes
+```
+
+To build multiarch (AMD64 and ARM64) image execute:
+```shell
+podman build --no-cache --platform linux/arm64 -t testsuite-pipelines-tools:latest-arm64 .
+podman build --no-cache --platform linux/amd64 -t testsuite-pipelines-tools:latest-amd64 .
+podman manifest rm testsuite-pipelines-tools:latest
+podman manifest create testsuite-pipelines-tools:latest
+podman manifest add testsuite-pipelines-tools:latest testsuite-pipelines-tools:latest-arm64
+podman manifest add testsuite-pipelines-tools:latest testsuite-pipelines-tools:latest-amd64
+podman manifest push testsuite-pipelines-tools:latest quay.io/kuadrant/testsuite-pipelines-tools:latest
+export TAG=0.x;podman manifest push testsuite-pipelines-tools:latest quay.io/kuadrant/testsuite-pipelines-tools:$TAG
+```
+
+### Docker
+Install [docker buildx](https://github.com/docker/buildx)
 (note: also install QEMU packages), be sure you are logged in quay.io and run:
 
 ```shell
 TAG=0.x docker buildx bake 
 ```
-
-Set the TAG env variable to an increment of the last version in https://quay.io/repository/kuadrant/testsuite-pipelines-tools?tab=tags
-
-Only members of [QE Team](https://quay.io/organization/kuadrant/teams/qe) and `kuadrant+qe` robot account are allowed to do the push.
