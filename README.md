@@ -135,10 +135,16 @@ sudo dnf install qemu-user-static
 sudo systemctl start systemd-binfmt.service
 ```
 
+It is also possible to use container:
+```shell
+podman run --rm --privileged mirror.gcr.io/multiarch/qemu-user-static --reset -p yes
+```
+
 To build multiarch (AMD64 and ARM64) image execute:
 ```shell
 podman build --no-cache --platform linux/arm64 -t testsuite-pipelines-tools:latest-arm64 .
 podman build --no-cache --platform linux/amd64 -t testsuite-pipelines-tools:latest-amd64 .
+podman manifest rm testsuite-pipelines-tools:latest
 podman manifest create testsuite-pipelines-tools:latest
 podman manifest add testsuite-pipelines-tools:latest testsuite-pipelines-tools:latest-arm64
 podman manifest add testsuite-pipelines-tools:latest testsuite-pipelines-tools:latest-amd64
