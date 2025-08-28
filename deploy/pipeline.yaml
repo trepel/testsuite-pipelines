@@ -35,6 +35,10 @@ spec:
     name: keycloak-channel
     type: string
     default: stable-v26
+  - description: Extensions binary image
+    name: extensions-binary-image
+    type: string
+    default: ' '
   - description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
     name: additional-helm-flags
     type: string
@@ -92,6 +96,8 @@ spec:
         value: $(params.keycloak-channel)
       - name: operator-name
         value: $(params.operator-name)
+      - name: extensions-binary-image
+        value: $(params.extensions-binary-image)
       - name: kubeconfig-path
         value: $(tasks.kubectl-login.results.kubeconfig-path)
       - name: additional-helm-flags
