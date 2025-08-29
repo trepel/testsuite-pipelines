@@ -25,6 +25,9 @@ spec:
     - description: Kuadrant operator name. 'kuadrant-operator' or 'rhcl-operator'
       name: operator-name
       type: string
+    - description: Extensions binary image
+      name: extensions-binary-image
+      type: string
     - description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'"
       name: additional-helm-flags
       type: string
@@ -66,6 +69,7 @@ spec:
       --set=kuadrant.indexImage="$(params.index-image)"
       --set=kuadrant.channel="$(params.channel)"
       --set=kuadrant.operatorName="$(params.operator-name)"
+      --set=kuadrant.extensionsBinaryImage="$(params.extensions-binary-image)"
       --set=istio.istioProvider="$(params.istio-provider)"
       --set=gatewayAPI.version="$(params.gateway-crd)"
       --set=tools.keycloak.operator.channel="$(params.keycloak-channel)"

@@ -63,6 +63,10 @@ spec:
       name: keycloak-channel
       type: string
     - default: ' '
+      description: Extensions binary image
+      name: extensions-binary-image
+      type: string
+    - default: ' '
       description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
       name: additional-helm-flags
       type: string
@@ -367,6 +371,8 @@ spec:
           value: $(params.gateway-crd)
         - name: keycloak-channel
           value: $(params.keycloak-channel)
+        - name: extensions-binary-image
+          value: $(params.extensions-binary-image)
         - name: additional-helm-flags
           value: $(params.additional-helm-flags)
         - name: additional-helm-tools-flags
