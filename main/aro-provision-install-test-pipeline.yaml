@@ -46,7 +46,7 @@ spec:
       description: Istio provider (ossm3, ocp), use ossm3 for OCP v4.18 and before
       name: istio-provider
       type: string
-    - default: ' '
+    - default: ""
       description: GatewayAPI CRD version. v1.0.0, v1.1.0, v1.2.1, v1.3.0 available; Leave empty if installing on OCP v4.19+
       name: gateway-crd
       type: string
@@ -54,15 +54,15 @@ spec:
       description: Keycloak subscription channel
       name: keycloak-channel
       type: string
-    - default: ' '
+    - default: ""
       description: Extensions binary image
       name: extensions-binary-image
       type: string
-    - default: ' '
+    - default: ""
       description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
       name: additional-helm-flags
       type: string
-    - default: ' '
+    - default: ""
       description: Additional flags for tools helm, example '--set=tools.keycloak.keycloakProvider=deployment --set=tools.valkey.enable=false'"
       name: additional-helm-tools-flags
       type: string
@@ -79,7 +79,7 @@ spec:
       description: Makefile target for tests
       name: make-target
       type: string
-    - default: ' '
+    - default: ""
       description: Pytest flags to use with Make (flags="${pytest-flags}" make kuadrant)
       name: pytest-flags
       type: string
@@ -87,7 +87,7 @@ spec:
       description: Config Map with settings for the testsuite
       name: settings-cm
       type: string
-    - default: ' '
+    - default: ""
       description: Additional env for testsuite container separated with spaces (e.g. KUADRANT_CONTROL_PLANE__provider_secret=gcp-credentials KUADRANT_KEYCLOAK__url="https://my-sso.net")
       name: additional-env
       type: string
@@ -96,7 +96,7 @@ spec:
       description: Prefix of the launch name saved in report portal (nightly, username, manual, etc.). In case of release candidate testing use kuadrant-v<version>, rhcl-v<version>, or authorino-v<version>
       name: launch-name
       type: string
-    - default: ' '
+    - default: ""
       description: Optional launch description for Report Portal
       name: launch-description
       type: string

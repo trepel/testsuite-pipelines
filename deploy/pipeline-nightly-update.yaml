@@ -30,15 +30,15 @@ spec:
   - description: Extensions binary image
     name: extensions-binary-image
     type: string
-    default: ' '
+    default: ""
   - description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
     name: additional-helm-flags
     type: string
-    default: ' '
+    default: ""
   - description: Additional flags for tools helm, example '--set=tools.keycloak.keycloakProvider=deployment --set=tools.valkey.enable=false'"
     name: additional-helm-tools-flags
     type: string
-    default: ' '
+    default: ""
   tasks:
   - name: nightly-image-date
     taskRef:
