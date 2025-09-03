@@ -1,0 +1,105 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: infra-rosa
+spec:
+  description: Provision ROSA
+  params:
+    - default: kua-rosa-credentials
+      description: Name of secret that contains IAM user credentials
+      name: aws-credentials
+      type: string
+    - default: kua-ocm-stage-client-credentials
+      description: Name of secret that contains client ID and client secret to log into OCM org
+      name: ocm-credentials
+      type: string
+    - default: staging
+      description: 'What OCM instance to use, either ''staging'' or ''production'''
+      name: ocm-instance
+      type: string
+    - default: kua-rosa-test
+      description: OSD cluster name
+      name: cluster-name
+      type: string
+    - default: '--compute-machine-type m5.xlarge --replicas 3 --non-sts --use-local-credentials -y'
+      description: 'Flags to be used for `rosa create cluster [:cluster-name]` command. Do not provide --cluster-name and --region flags here.'
+      name: create-cmd-flags
+      type: string
+    - default: us-east-1
+      description: AWS Region to use
+      name: region
+      type: string
+  tasks:
+    - name: rosa-login
+      params:
+        - name: ocm-instance
+          value: $(params.ocm-instance)
+        - name: ocm-credentials
+          value: $(params.ocm-credentials)
+        - name: region
+          value: $(params.region)
+        - name: aws-credentials
+          value: $(params.aws-credentials)
+      taskRef:
+        kind: Task
+        name: rosa-login
+      workspaces:
+        - name: shared-workspace
+    - name: provision-rosa
+      params:
+        - name: aws-credentials
+          value: $(params.aws-credentials)
+        - name: create-cmd-flags
+          value: $(params.create-cmd-flags)
+        - name: cluster-name
+          value: $(params.cluster-name)
+        - name: region
+          value: $(params.region)
+        - name: provision-cluster
+          value: true
+      taskRef:
+        kind: Task
+        name: provision-rosa
+      runAfter:
+        - rosa-login
+      workspaces:
+        - name: shared-workspace
+    - name: wait-till-osd-is-ready
+      params:
+        - name: cluster-id
+          value: $(tasks.provision-rosa.results.cluster-id)
+      taskRef:
+        kind: Task
+        name: wait-till-osd-is-ready
+      runAfter:
+        - provision-rosa
+      workspaces:
+        - name: shared-workspace
+    - name: get-osd-credentials
+      params:
+        - name: cluster-id
+          value: $(tasks.provision-rosa.results.cluster-id)
+        - name: provision-cluster
+          value: true
+      taskRef:
+        kind: Task
+        name: get-osd-credentials
+      runAfter:
+        - wait-till-osd-is-ready
+      workspaces:
+        - name: shared-workspace
+    - name: wait-for-valid-certificates
+      params:
+        - name: console-url
+          value: $(tasks.get-osd-credentials.results.console-url)
+        - name: api-url
+          value: $(tasks.get-osd-credentials.results.kube-api)
+      taskRef:
+        kind: Task
+        name: wait-for-valid-certificates
+      runAfter:
+        - get-osd-credentials
+      workspaces:
+        - name: shared-workspace
+  workspaces:
+    - name: shared-workspace

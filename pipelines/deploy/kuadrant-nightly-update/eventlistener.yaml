@@ -1,0 +1,67 @@
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: nightly-update-listener
+spec:
+  serviceAccountName: pipeline
+  triggers:
+    - name: kuadrant-nightly-update-trigger
+      bindings:
+        - name: kube-api
+          value: https://api.kuadrant-1.example.io:6443
+      template:
+        spec:
+          params:
+            - name: kube-api
+          resourcetemplates:
+            - apiVersion: tekton.dev/v1beta1
+              kind: PipelineRun
+              metadata:
+                generateName: nightly-update-
+              spec:
+                pipelineRef:
+                  name: deploy-kuadrant-nightly-update
+                timeouts:
+                  pipeline: 30m0s
+                params:
+                  - name: kube-api
+                    value: $(tt.params.kube-api)
+                workspaces:
+                  - name: shared-workspace
+                    volumeClaimTemplate:
+                      spec:
+                        accessModes:
+                          - ReadWriteOnce
+                        resources:
+                          requests:
+                            storage: 10Mi
+    - name: kuadrant-nightly-update-trigger
+      bindings:
+        - name: kube-api
+          value: https://api.kuadrant-2.example.io:6443
+      template:
+        spec:
+          params:
+            - name: kube-api
+          resourcetemplates:
+            - apiVersion: tekton.dev/v1beta1
+              kind: PipelineRun
+              metadata:
+                generateName: nightly-update-
+              spec:
+                pipelineRef:
+                  name: deploy-kuadrant-nightly-update
+                timeouts:
+                  pipeline: 30m0s
+                params:
+                  - name: kube-api
+                    value: $(tt.params.kube-api)
+                workspaces:
+                  - name: shared-workspace
+                    volumeClaimTemplate:
+                      spec:
+                        accessModes:
+                          - ReadWriteOnce
+                        resources:
+                          requests:
+                            storage: 10Mi

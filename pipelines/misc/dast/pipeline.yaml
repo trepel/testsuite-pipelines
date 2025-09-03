@@ -1,0 +1,97 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: misc-dast
+  annotations:
+    pipelinesascode.tekton.dev/coschedule: workspaces
+spec:
+  params:
+    - description: URL of Kubernetes API
+      name: kube-api
+      type: string
+    - description: Subfolder path - results will be stored in this subfolder of rhcl folder in ProdSec Central Storage. Can contain slashes but do not include leading and trailing slashes. Typically v<version> is used
+      name: subfolder-path
+      type: string
+      default: v9.9.9
+    - description: Secret name with cluster credentials
+      name: cluster-credentials
+      type: string
+      default: openshift-pipelines-credentials
+    - description: rapiDAST version - see releases in github.com/RedHatProductSecurity/rapidast
+      name: rapidast-version
+      type: string
+      default: 2.12.0
+    - description: Whether to skip cleanup or not (true/false)
+      name: skip-cleanup
+      type: string
+      default: false
+  tasks:
+    - name: clone-rapidast-repo
+      params:
+        - name: rapidast-version
+          value: $(params.rapidast-version)
+      taskRef:
+        kind: Task
+        name: clone-rapidast-repo
+      workspaces:
+        - name: shared-workspace
+    - name: kubectl-login
+      params:
+        - name: kube-api
+          value: $(params.kube-api)
+        - name: testsuite-image
+          value: quay.io/kuadrant/testsuite-pipelines-tools:latest
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
+      taskRef:
+        kind: Task
+        name: kubectl-login
+      workspaces:
+        - name: shared-workspace
+    - name: compose-config-file
+      params:
+        - name: kube-api
+          value: $(params.kube-api)
+        - name: cluster-api-token
+          value: $(tasks.kubectl-login.results.token)
+        - name: subfolder-path
+          value: $(params.subfolder-path)
+      taskRef:
+        kind: Task
+        name: compose-config-file
+      runAfter:
+        - kubectl-login
+      workspaces:
+        - name: shared-workspace
+    - name: rapidast-scan
+      taskRef:
+        kind: Task
+        name: rapidast-scan
+      runAfter:
+        - clone-rapidast-repo
+        - compose-config-file
+      workspaces:
+        - name: shared-workspace
+    - name: wait-for-job-to-complete
+      params:
+        - name: job-name
+          value: rapidast-job
+      taskRef:
+        kind: Task
+        name: wait-for-job-to-complete
+      runAfter:
+        - rapidast-scan
+    - name: rapidast-cleanup
+      when:
+        - input: $(params.skip-cleanup)
+          operator: in
+          values: ["false"]
+      taskRef:
+        kind: Task
+        name: rapidast-cleanup
+      runAfter:
+        - wait-for-job-to-complete
+      workspaces:
+        - name: shared-workspace
+  workspaces:
+    - name: shared-workspace

@@ -5,18 +5,17 @@ This repository contains Kuadrant testsuite pipeline objects
 Deployment
 ---
 1. Install the `openshift-pipelines` Openshift operator on the cluster
-2. Create required pipelines and their resources
-   * Apply main pipeline `kubectl apply -k main/ -n ${PIPELINE_NAMESPACE}`
-   * Apply nightly pipeline `kubectl apply -k nightly/ -n ${PIPELINE_NAMESPACE}`
-   * Apply helm-deploy pipelines `kubectl apply -k deploy/ -n ${PIPELINE_NAMESPACE}`
-   * Apply infrastructure pipelines `kubectl apply -k infra/ -n ${PIPELINE_NAMESPACE}`
-   * Apply rapiDAST pipeline `kubectl apply -k dast/ -n ${PIPELINE_NAMESPACE}`
+2. Deploy pipeline by running `kubectl apply -k pipelines/<pipeline-dir>/<pipeline>/` on the desired pipeline directory. Pipelines are grouped by their purpose:
+   - `pipelines/test/` - pipelines that execute testsuite tests
+   - `pipelines/deploy/` - pipelines that deploy Kuadrant on clusters
+   - `pipelines/infra/` - pipelines for provisioning and managing kubernetes clusters
+   - `pipelines/misc/` - other pipelines, e.g. for rapiDAST security scans
 
-Secrets
+Required secrets and configmaps
 ---
 Prior to the running of the pipeline, the following resources must be created in the pipeline namespace:
 
-### Testsuite pipelines
+#### Resources required to run test/ pipelines
 - Opaque Secret (pipelines expect `openshift-pipelines-credentials` name by default but custom name can be specified via `cluster-credentials` input parameter) containing `KUBE_PASSWORD` and `KUBE_USER` keys 
 with the credentials to access the testing cluster. E.g.
 ```shell
@@ -42,13 +41,13 @@ export ADDITIONAL_AUTH_ENTRIES='"desired.registry.io": {"auth": "base64-encoded-
 kubectl create secret generic additional-auth-entries --from-literal="additional-auth-entries=$ADDITIONAL_AUTH_ENTRIES" -n "${PIPELINE_NAMESPACE}"
 ```
 
-### Helm pipelines
+#### Resources required to run deploy/ pipelines
 - Opaque Secret named values-additional-manifests containing secrets for testsuite run. Example: https://github.com/azgabur/kuadrant-helm-install/blob/main/example-additionalManifests.yaml
 ```shell
 kubectl create -n ${PIPELINE_NAMESPACE} secret generic values-additional-manifests --from-file=additionalManifests.yaml=${ADDITIONAL_MANIFESTS.yaml}
 ```
 
-### Resources required for infrastructure pipelines
+#### Resources required to run infra/ pipelines
 - Opaque secret containing AWS credentials for `osdCcsAdmin` IAM user (pipelines provisioning clusters in AWS only). E.g.
 ```shell
 kubectl create secret generic kua-aws-credentials --from-literal=AWS_ACCOUNT_ID="xxx" --from-literal=AWS_ACCESS_KEY_ID="xxx" --from-literal=AWS_SECRET_ACCESS_KEY="xxx" -n ${PIPELINE_NAMESPACE}
@@ -79,7 +78,7 @@ kubectl create secret generic kua-azure-credentials --from-literal=APP_ID="xxx" 
 kubectl create secret generic aro-pull-secret --from-file=.dockerconfigjson=/path/to/your/auths.json  --type=kubernetes.io/dockerconfigjson -n ${PIPELINE_NAMESPACE}
 ```
 
-### Resources required for rapiDAST pipeline
+#### Resources required for rapiDAST pipeline
 - Opaque secret containing credentials for Google Cloud storage where rapiDAST scan results will be stored. E.g.
 ```shell
 kubectl create secret generic rapidast-storage-access-key --from-file=rapidast-sa-rhcl_key.json=/local/path/to/your-service-account_key.json -n ${PIPELINE_NAMESPACE}

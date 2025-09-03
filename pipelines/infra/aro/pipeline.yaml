@@ -1,0 +1,45 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: infra-aro
+spec:
+  description: Provision ARO (OpenShift on Azure)
+  params:
+    - default: kua-azure-credentials
+      description: Name of secret that contains credentials for Azure Service Principal
+      name: azure-credentials
+      type: string
+    - default: aro-pull-secret
+      description: Pull secret for ARO
+      name: aro-pull-secret
+      type: string
+    - default: kua-aro
+      description: ARO cluster name
+      name: cluster-name
+      type: string
+    - default: eastus
+      description: Location for the cluster (region)
+      name: location
+      type: string
+    - default: '--master-vm-size Standard_D8s_v3 --worker-vm-size Standard_D4s_v3 --worker-count 3 --worker-vm-disk-size-gb 128 --pod-cidr 10.128.0.0/14 --service-cidr 172.30.0.0/16 --tags owner=kua-pipeline --debug'
+      description: 'Flags to be used for `az aro create cluster` command. Do not provide resource group (-g), cluster name (-n), location, pull-secret, master-subnet, worker-subnet, vnet, client-id, client-secret flags here.'
+      name: create-cmd-flags
+      type: string
+  tasks:
+    - name: provision-aro
+      params:
+        - name: azure-credentials
+          value: $(params.azure-credentials)
+        - name: create-cmd-flags
+          value: $(params.create-cmd-flags)
+        - name: cluster-name
+          value: $(params.cluster-name)
+        - name: aro-pull-secret
+          value: $(params.aro-pull-secret)
+        - name: location
+          value: $(params.location)
+        - name: provision-cluster
+          value: true
+      taskRef:
+        kind: Task
+        name: provision-aro

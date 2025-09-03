@@ -1,0 +1,520 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: test-osd
+spec:
+  params:
+# Cluster related parameters
+    - default: true
+      description: 'If not set to "true" then existing cluster will be used. The cluster must be created via OCM/HCC.'
+      name: provision-cluster
+      type: string
+    - default: osd-aws
+      description: Cluster type (osd-aws, osd-gcp, rosa)
+      name: cluster-type
+      type: string
+    - default: ""
+      description: Cloud Provider credentials, leave empty to use defaults
+      name: provider-credentials
+      type: string
+    - default: 'us-east-1'
+      description: AWS Region to use - required for rosa only
+      name: region
+      type: string
+    - default: staging
+      description: OCM/HCC instance (staging, production)
+      name: ocm-instance
+      type: string
+    - default: kua-ocm-stage-client-credentials
+      description: OCM/HCC credentials
+      name: ocm-credentials
+      type: string
+    - default: kua-test
+      description: Cluster name
+      name: cluster-name
+      type: string
+    - default: ""
+      description: Cluster creation flags. Leave empty to use defaults (they depend on Cloud Provider)
+      name: create-cmd-flags
+      type: string
+# Kuadrant/RHCL installation related parameters
+    - default: quay.io/kuadrant/kuadrant-operator-catalog:v1.2.0
+      description: Kuadrant/RHCL index image, leave empty to install current RHCL GA
+      name: index-image
+      type: string
+    - default: stable
+      description: Kuadrant channel (stable, preview)
+      name: channel
+      type: string
+    - default: kuadrant-operator
+      description: Operator name (kuadrant-operator, rhcl-operator)
+      name: operator-name
+      type: string
+    - default: ocp
+      description: Istio provider (ossm3, ocp), use ossm3 for OCP v4.18 and before
+      name: istio-provider
+      type: string
+    - default: ""
+      description: GatewayAPI CRD version. v1.0.0, v1.1.0, v1.2.1, v1.3.0 available; Leave empty if installing on OCP v4.19+
+      name: gateway-crd
+      type: string
+    - default: stable-v26
+      description: Keycloak subscription channel
+      name: keycloak-channel
+      type: string
+    - default: ""
+      description: Extensions binary image
+      name: extensions-binary-image
+      type: string
+    - default: ""
+      description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
+      name: additional-helm-flags
+      type: string
+    - default: ""
+      description: Additional flags for tools helm, example '--set=tools.keycloak.keycloakProvider=deployment --set=tools.valkey.enable=false'"
+      name: additional-helm-tools-flags
+      type: string
+# Testsuite related parameters
+    - default: 'quay.io/kuadrant/testsuite:unstable'
+      description: Testsuite image
+      name: testsuite-image
+      type: string
+    - default: kuadrant
+      description: Openshift project
+      name: project
+      type: string
+    - default: test
+      description: Makefile target for tests
+      name: make-target
+      type: string
+    - default: ""
+      description: Pytest flags to use with Make (flags="${pytest-flags}" make kuadrant)
+      name: pytest-flags
+      type: string
+    - default: pipeline-settings
+      description: Config Map with settings for the testsuite
+      name: settings-cm
+      type: string
+    - default: ""
+      description: Additional env for testsuite container separated with spaces (e.g. KUADRANT_CONTROL_PLANE__provider_secret=gcp-credentials KUADRANT_KEYCLOAK__url="https://my-sso.net")
+      name: additional-env
+      type: string
+# Report Portal related parameters
+    - default: full-cycle-install
+      description: Prefix of the launch name saved in report portal (nightly, username, manual, etc.). In case of release candidate testing use kuadrant-v<version>, rhcl-v<version>, or authorino-v<version>
+      name: launch-name
+      type: string
+    - default: ""
+      description: Optional launch description for Report Portal
+      name: launch-description
+      type: string
+    - default: testsuite
+      description: Report Portal Project to store test results (testsuite or nightly-testsuite typically)
+      name: rp-project
+      type: string
+    - default: true
+      description: If set to 'true' upload test results to Report Portal
+      name: upload-results
+      type: string
+# Cleanup
+    - default: false
+      description: If set to 'true' cleanup will be done
+      name: cleanup
+      type: string
+  workspaces:
+    - name: shared-workspace
+  tasks:
+    - name: ocm-login
+      params:
+        - name: ocm-instance
+          value: $(params.ocm-instance)
+        - name: ocm-credentials
+          value: $(params.ocm-credentials)
+      taskRef:
+        kind: Task
+        name: ocm-login
+      workspaces:
+        - name: shared-workspace
+    - name: parameter-sanity-check
+      params:
+        - name: cluster-type
+          value: $(params.cluster-type)
+        - name: cluster-name
+          value: $(params.cluster-name)
+        - name: provider-credentials
+          value: $(params.provider-credentials)
+        - name: create-cmd-flags
+          value: $(params.create-cmd-flags)
+        - name: index-image
+          value: $(params.index-image)
+        - name: channel
+          value: $(params.channel)
+        - name: operator-name
+          value: $(params.operator-name)
+        - name: provision-cluster
+          value: $(params.provision-cluster)
+      runAfter:
+        - ocm-login
+      taskRef:
+        kind: Task
+        name: parameter-sanity-check
+      workspaces:
+        - name: shared-workspace
+    - name: rosa-login
+      when:
+        - input: "$(params.cluster-type)"
+          operator: in
+          values: ['rosa']
+      params:
+        - name: ocm-instance
+          value: $(params.ocm-instance)
+        - name: ocm-credentials
+          value: $(params.ocm-credentials)
+        - name: region
+          value: $(params.region)
+        - name: aws-credentials
+          value: $(tasks.parameter-sanity-check.results.provider-credentials)
+      runAfter:
+        - parameter-sanity-check
+      taskRef:
+        kind: Task
+        name: rosa-login
+      workspaces:
+        - name: shared-workspace
+    - name: provision-osd-aws
+      when:
+        - input: "$(params.cluster-type)"
+          operator: in
+          values: ['osd-aws']
+      params:
+        - name: aws-credentials
+          value: $(tasks.parameter-sanity-check.results.provider-credentials)
+        - name: create-cmd-flags
+          value: $(tasks.parameter-sanity-check.results.create-cmd-flags)
+        - name: cluster-name
+          value: $(params.cluster-name)
+        - name: provision-cluster
+          value: $(params.provision-cluster)
+      runAfter:
+        - parameter-sanity-check
+      taskRef:
+        kind: Task
+        name: provision-osd-aws
+      workspaces:
+        - name: shared-workspace
+    - name: provision-osd-gcp
+      when:
+        - input: "$(params.cluster-type)"
+          operator: in
+          values: ['osd-gcp']
+      params:
+        - name: gcp-credentials
+          value: $(tasks.parameter-sanity-check.results.provider-credentials)
+        - name: create-cmd-flags
+          value: $(tasks.parameter-sanity-check.results.create-cmd-flags)
+        - name: cluster-name
+          value: $(params.cluster-name)
+        - name: provision-cluster
+          value: $(params.provision-cluster)
+      runAfter:
+        - parameter-sanity-check
+      taskRef:
+        kind: Task
+        name: provision-osd-gcp
+      workspaces:
+        - name: shared-workspace
+    - name: provision-rosa
+      when:
+        - input: "$(params.cluster-type)"
+          operator: in
+          values: ['rosa']
+      params:
+        - name: aws-credentials
+          value: $(tasks.parameter-sanity-check.results.provider-credentials)
+        - name: create-cmd-flags
+          value: $(tasks.parameter-sanity-check.results.create-cmd-flags)
+        - name: cluster-name
+          value: $(params.cluster-name)
+        - name: region
+          value: $(params.region)
+        - name: provision-cluster
+          value: $(params.provision-cluster)
+      runAfter:
+        - rosa-login
+      taskRef:
+        kind: Task
+        name: provision-rosa
+      workspaces:
+        - name: shared-workspace
+    - name: get-cluster-id
+      params:
+        - name: cluster-name
+          value: $(params.cluster-name)
+      runAfter:
+        - provision-osd-aws
+        - provision-osd-gcp
+        - provision-rosa
+      taskRef:
+        kind: Task
+        name: get-cluster-id
+      workspaces:
+        - name: shared-workspace
+    - name: wait-till-osd-is-ready
+      params:
+        - name: cluster-id
+          value: $(tasks.get-cluster-id.results.cluster-id)
+      runAfter:
+        - get-cluster-id
+      taskRef:
+        kind: Task
+        name: wait-till-osd-is-ready
+      workspaces:
+        - name: shared-workspace
+    - name: get-osd-credentials
+      params:
+        - name: cluster-id
+          value: $(tasks.get-cluster-id.results.cluster-id)
+        - name: provision-cluster
+          value: $(params.provision-cluster)
+      runAfter:
+        - wait-till-osd-is-ready
+      taskRef:
+        kind: Task
+        name: get-osd-credentials
+      workspaces:
+        - name: shared-workspace
+    - name: wait-for-valid-certificates
+      params:
+        - name: console-url
+          value: $(tasks.get-osd-credentials.results.console-url)
+        - name: api-url
+          value: $(tasks.get-osd-credentials.results.kube-api)
+      taskRef:
+        kind: Task
+        name: wait-for-valid-certificates
+      runAfter:
+        - get-osd-credentials
+      workspaces:
+        - name: shared-workspace
+    - name: check-image-existence
+      when:
+        - input: "$(params.index-image)"
+          operator: notin
+          values: ['']
+      params:
+        - name: index-image
+          value: $(params.index-image)
+      taskRef:
+        kind: Task
+        name: check-image-existence
+    - name: kubectl-login
+      params:
+        - name: kube-api
+          value: $(tasks.get-osd-credentials.results.kube-api)
+        - name: testsuite-image
+          value: 'quay.io/kuadrant/testsuite-pipelines-tools:latest'
+        - name: cluster-credentials
+          value: $(tasks.get-osd-credentials.results.credentials-secret)
+      runAfter:
+        - wait-for-valid-certificates
+      taskRef:
+        kind: Task
+        name: kubectl-login
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: helm-uninstall
+      params:
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+      runAfter:
+        - kubectl-login
+        - check-image-existence
+      taskRef:
+        kind: Task
+        name: helm-uninstall
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: prepare-for-rhcl-rc-install
+      when:
+        - input: "$(params.operator-name)"
+          operator: in
+          values: ['rhcl-operator']
+        - input: "$(params.index-image)"
+          operator: notin
+          values: ['']
+      params:
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+      runAfter:
+        - helm-uninstall
+      taskRef:
+        kind: Task
+        name: prepare-for-rhcl-rc-install
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: helm-install
+      params:
+        - name: index-image
+          value: $(params.index-image)
+        - name: channel
+          value: $(params.channel)
+        - name: istio-provider
+          value: $(params.istio-provider)
+        - name: operator-name
+          value: $(params.operator-name)
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+        - name: gateway-crd
+          value: $(params.gateway-crd)
+        - name: keycloak-channel
+          value: $(params.keycloak-channel)
+        - name: extensions-binary-image
+          value: $(params.extensions-binary-image)
+        - name: additional-helm-flags
+          value: $(params.additional-helm-flags)
+        - name: additional-helm-tools-flags
+          value: $(params.additional-helm-tools-flags)
+      runAfter:
+        - helm-uninstall
+        - prepare-for-rhcl-rc-install
+      taskRef:
+        kind: Task
+        name: helm-install
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: operator-pod-restart
+      params:
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+      runAfter:
+        - helm-install
+      taskRef:
+        kind: Task
+        name: operator-pod-restart
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: run-tests
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: $(params.make-target)
+        - name: pytest-flags
+          value: $(params.pytest-flags)
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: additional-env
+          value: $(params.additional-env)
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+        - name: cluster-credentials
+          value: $(tasks.get-osd-credentials.results.credentials-secret)
+      runAfter:
+        - operator-pod-restart
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+    - name: upload-results
+      when:
+        - input: $(params.upload-results)
+          operator: in
+          values: ["true"]
+      params:
+        - name: launch-name
+          value: $(params.launch-name)
+        - name: launch-description
+          value: $(params.launch-description)
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: make-target
+          value: $(params.make-target)
+        - name: rp-project
+          value: $(params.rp-project)
+        - name: ocp-version
+          value: $(tasks.kubectl-login.results.ocp-version)
+      runAfter:
+        - run-tests
+      taskRef:
+        kind: Task
+        name: upload-results
+      workspaces:
+        - name: shared-workspace
+    - name: helm-uninstall-cleanup
+      when:
+        - input: $(params.cleanup)
+          operator: in
+          values: ["true"]
+      params:
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+      runAfter:
+        - upload-results
+        - run-tests
+      taskRef:
+        kind: Task
+        name: helm-uninstall
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: delete-osd
+      when:
+        - input: $(params.cleanup)
+          operator: in
+          values: ["true"]
+        - input: $(params.cluster-type)
+          operator: in
+          values: ["osd-aws", "osd-gcp"]
+      params:
+        - name: cluster-id
+          value: $(tasks.get-cluster-id.results.cluster-id)
+      runAfter:
+        - helm-uninstall-cleanup
+      taskRef:
+        kind: Task
+        name: delete-osd
+      workspaces:
+        - name: shared-workspace
+    - name: delete-rosa
+      when:
+        - input: $(params.cleanup)
+          operator: in
+          values: ["true"]
+        - input: $(params.cluster-type)
+          operator: in
+          values: ["rosa"]
+      params:
+        - name: cluster-id
+          value: $(tasks.get-cluster-id.results.cluster-id)
+        - name: region
+          value: $(params.region)
+        - name: aws-credentials
+          value: $(tasks.parameter-sanity-check.results.provider-credentials)
+      runAfter:
+        - helm-uninstall-cleanup
+      taskRef:
+        kind: Task
+        name: delete-rosa
+      workspaces:
+        - name: shared-workspace
+    - name: cluster-secret-cleanup
+      when:
+        - input: $(params.cleanup)
+          operator: in
+          values: ["true"]
+      params:
+        - name: cluster-name
+          value: $(params.cluster-name)
+      runAfter:
+        - helm-uninstall-cleanup
+      taskRef:
+        kind: Task
+        name: cluster-secret-cleanup

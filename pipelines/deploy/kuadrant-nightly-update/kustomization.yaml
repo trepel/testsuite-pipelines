@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - pairs:
+      deployment: kuadrant-qe-pipeline-update-kuadrant-nightly
+      app: deploy-kuadrant-nightly-update
+
+components:
+  - ../../../tasks/login/
+  - ../../../tasks/deploy/
+
+resources:
+  - eventlistener.yaml
+  - trigger-nightly-update.yaml
+  - pipeline.yaml

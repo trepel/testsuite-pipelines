@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - pairs:
+      deployment: kuadrant-qe-pipeline
+      app: misc-dast
+
+components:
+  - ../../../tasks/login/
+  - ../../../tasks/misc/
+
+resources:
+  - pipeline.yaml
