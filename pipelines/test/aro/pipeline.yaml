@@ -330,8 +330,6 @@ spec:
       taskRef:
         kind: Task
         name: delete-aro
-      workspaces:
-        - name: shared-workspace
     - name: cluster-secret-cleanup
       when:
         - input: $(params.cleanup)
