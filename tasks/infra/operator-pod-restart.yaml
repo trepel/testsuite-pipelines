@@ -29,18 +29,11 @@ spec:
             exit 1
         fi
 
-        # Delete the operator Pod
-        pod_count=$(kubectl get pods -l app=kuadrant -o jsonpath='{.items[*].metadata.name}' -n $namespace | wc -w)
-        if [[ $pod_count -ne 1 ]]; then
-            echo "Expected exactly 1 pod, found $pod_count"
-            exit 1
-        fi
-        pod_name=$(kubectl get pods -l app=kuadrant -o jsonpath='{.items[0].metadata.name}' -n $namespace)
-        kubectl delete pod $pod_name --wait=true --timeout=60s -n $namespace
+        # Delete the operator Pod(s) - the one(s) with app=kuadrant label
+        kubectl delete pod -l app=kuadrant --wait=true -n $namespace
 
-        # Wait for the new Pod to get up and running
-        pod_name=$(kubectl get pods -l app=kuadrant -o jsonpath='{.items[0].metadata.name}' -n $namespace)
-        kubectl wait --for=condition=Ready pod/$pod_name --timeout=120s -n $namespace
+        # Wait for a new Pod to get up and running
+        kubectl wait --for=condition=Ready pod -l app=kuadrant --timeout=300s -n $namespace
   workspaces:
     - name: shared-workspace
 
