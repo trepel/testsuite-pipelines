@@ -9,10 +9,16 @@ spec:
       bindings:
         - name: kube-api
           value: https://api.kuadrant-1.example.io:6443
+        - name: istio-provider
+          value: ocp
+        - name: gateway-crd
+          value: ""
       template:
         spec:
           params:
             - name: kube-api
+            - name: istio-provider
+            - name: gateway-crd
           resourcetemplates:
             - apiVersion: tekton.dev/v1beta1
               kind: PipelineRun
@@ -26,6 +32,10 @@ spec:
                 params:
                   - name: kube-api
                     value: $(tt.params.kube-api)
+                  - name: istio-provider
+                    value: $(tt.params.istio-provider)
+                  - name: gateway-crd
+                    value: $(tt.params.gateway-crd)
                 workspaces:
                   - name: shared-workspace
                     volumeClaimTemplate:
@@ -39,10 +49,16 @@ spec:
       bindings:
         - name: kube-api
           value: https://api.kuadrant-2.example.io:6443
+        - name: istio-provider
+          value: ocp
+        - name: gateway-crd
+          value: ""
       template:
         spec:
           params:
             - name: kube-api
+            - name: istio-provider
+            - name: gateway-crd
           resourcetemplates:
             - apiVersion: tekton.dev/v1beta1
               kind: PipelineRun
@@ -56,6 +72,10 @@ spec:
                 params:
                   - name: kube-api
                     value: $(tt.params.kube-api)
+                  - name: istio-provider
+                    value: $(tt.params.istio-provider)
+                  - name: gateway-crd
+                    value: $(tt.params.gateway-crd)
                 workspaces:
                   - name: shared-workspace
                     volumeClaimTemplate:
