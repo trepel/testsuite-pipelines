@@ -103,7 +103,7 @@ Useful commands
 ---
 * Trigger nightly pipeline manually
 ```shell
-kubectl create job --from=cronjob/trigger-nightly-pipeline trigger-nightly-pipeline-$(date +%d.%m)-$(whoami)-manual -n ${PIPELINE_NAMESPACE}
+kubectl create job --from=cronjob/trigger-nightly-testsuite-cron trigger-nightly-pipeline-$(date +%d.%m)-$(whoami)-manual -n ${PIPELINE_NAMESPACE}
 ```
 
 * Set default dns configuration for Tekton pods
