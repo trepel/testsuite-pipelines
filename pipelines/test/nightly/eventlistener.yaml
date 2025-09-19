@@ -43,10 +43,10 @@ spec:
             - apiVersion: tekton.dev/v1beta1
               kind: PipelineRun
               metadata:
-                generateName: nightly-$(tt.params.make-target)-
+                generateName: test-nightly-$(tt.params.make-target)-
               spec:
                 pipelineRef:
-                  name: nightly-pipeline
+                  name: test-nightly
                 timeouts:
                   pipeline: 2h0m0s
                 params:
