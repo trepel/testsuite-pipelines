@@ -427,12 +427,18 @@ spec:
         name: run-tests
       workspaces:
         - name: shared-workspace
+    - name: pause-pipeline
+      runAfter:
+        - run-tests-pre-upgrade
+      taskRef:
+        kind: Task
+        name: pause-pipeline
     - name: upgrade-to-latest
       params:
         - name: kubeconfig-path
           value: $(tasks.kubectl-login.results.kubeconfig-path)
       runAfter:
-        - run-tests-pre-upgrade
+        - pause-pipeline
       taskRef:
         kind: Task
         name: upgrade-to-latest
