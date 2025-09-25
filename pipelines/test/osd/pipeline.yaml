@@ -37,6 +37,10 @@ spec:
       description: Cluster creation flags. Leave empty to use defaults (they depend on Cloud Provider)
       name: create-cmd-flags
       type: string
+    - default: "7"
+      description: Number of hours before HCC removes the cluster
+      name: cluster-lifespan
+      type: string
 # Kuadrant/RHCL installation related parameters
     - default: quay.io/kuadrant/kuadrant-operator-catalog:v1.2.0
       description: Kuadrant/RHCL index image, leave empty to install current RHCL GA
@@ -195,6 +199,8 @@ spec:
           value: $(params.cluster-name)
         - name: provision-cluster
           value: $(params.provision-cluster)
+        - name: cluster-lifespan
+          value: $(params.cluster-lifespan)
       runAfter:
         - parameter-sanity-check
       taskRef:
@@ -216,6 +222,8 @@ spec:
           value: $(params.cluster-name)
         - name: provision-cluster
           value: $(params.provision-cluster)
+        - name: cluster-lifespan
+          value: $(params.cluster-lifespan)
       runAfter:
         - parameter-sanity-check
       taskRef:
@@ -239,6 +247,8 @@ spec:
           value: $(params.region)
         - name: provision-cluster
           value: $(params.provision-cluster)
+        - name: cluster-lifespan
+          value: $(params.cluster-lifespan)
       runAfter:
         - rosa-login
       taskRef:
