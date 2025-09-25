@@ -1,0 +1,53 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: pause-pipeline
+spec:
+  description: 'Pause the pipeline when "pause-pipeline" ConfigMap exists with ".data.pause: true"'
+  steps:
+    - name: pause-pipeline
+      computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+
+        CONFIGMAP_NAME="pause-pipeline"
+        CHECK_INTERVAL=30
+
+        echo "Checking for '$CONFIGMAP_NAME' ConfigMap. It can be created using the following command:"
+        echo "kubectl create configmap $CONFIGMAP_NAME --from-literal=pause=true"
+
+        while true; do
+          # Check if configmap exists
+          if kubectl get configmap "$CONFIGMAP_NAME" -n "$NAMESPACE" >/dev/null 2>&1; then
+            # Check if pause is set to true
+            PAUSE_VALUE=$(kubectl get configmap "$CONFIGMAP_NAME" -n "$NAMESPACE" -o jsonpath='{.data.pause}' 2>/dev/null || echo "")
+
+            if [ "$PAUSE_VALUE" = "true" ]; then
+              echo "The '$CONFIGMAP_NAME' ConfigMap found with .data.pause set to true"
+              echo "To continue either delete the ConfigMap or patch it so that .data.pause is no longer set to 'true', see the two commands below:"
+              echo "kubectl delete configmap $CONFIGMAP_NAME"
+              echo "kubectl patch configmap $CONFIGMAP_NAME -p '{\"data\":{\"pause\":\"false\"}}'"
+              echo ""
+              sleep "$CHECK_INTERVAL"
+              continue
+            else
+              echo "The '$CONFIGMAP_NAME' ConfigMap exists but .data.pause is not set to 'true'. Proceeding."
+              break
+            fi
+          else
+            echo "No '$CONFIGMAP_NAME' ConfigMap found. Proceeding..."
+            break
+          fi
+        done
+

@@ -11,6 +11,7 @@ resources:
   - ocm-login.yaml
   - operator-pod-restart.yaml
   - parameter-sanity-check.yaml
+  - pause-pipeline.yaml
   - prepare-for-rhcl-rc-install.yaml
   - provision-aro.yaml
   - provision-osd-aws.yaml
