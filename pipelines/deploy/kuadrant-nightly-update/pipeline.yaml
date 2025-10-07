@@ -67,20 +67,8 @@ spec:
     workspaces:
     - name: shared-workspace
       workspace: shared-workspace
-  - name: helm-uninstall
-    params:
-      - name: kubeconfig-path
-        value: $(tasks.kubectl-login.results.kubeconfig-path)
-    runAfter:
-    - kubectl-login
-    - check-image-existence
-    taskRef:
-      kind: Task
-      name: helm-uninstall
-    workspaces:
-    - name: shared-workspace
-      workspace: shared-workspace
-  - name: helm-install
+  - name: helm-deploy
+    retries: 3
     params:
       - name: index-image
         value: $(tasks.nightly-image-date.results.nightly-image)
@@ -103,10 +91,11 @@ spec:
       - name: extensions-binary-image
         value: $(params.extensions-binary-image)
     runAfter:
-    - helm-uninstall
+    - kubectl-login
+    - check-image-existence
     taskRef:
       kind: Task
-      name: helm-install
+      name: helm-deploy
     workspaces:
     - name: shared-workspace
       workspace: shared-workspace

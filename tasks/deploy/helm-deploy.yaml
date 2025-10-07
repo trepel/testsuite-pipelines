@@ -1,7 +1,7 @@
 apiVersion: tekton.dev/v1
 kind: Task
 metadata:
-  name: helm-install
+  name: helm-deploy
 spec:
   params:
     - description: Kuadrant image url
@@ -35,6 +35,102 @@ spec:
       name: additional-helm-tools-flags
       type: string
   steps:
+  # Uninstall steps first(cleanup before install)
+  - name: remove-leftovers-kuadrant-ns
+    args:
+      - >-
+        for crd in $(kubectl get crd -o name | grep "kuadrant" | sed 's/.*\/\(.*\)/\1/'); do
+            kubectl get --chunk-size=0 -o name -n "kuadrant" "$crd" |\
+            xargs --no-run-if-empty -P 20 -n 1 kubectl delete --ignore-not-found -n "kuadrant"
+        done
+    command:
+      - /bin/bash
+      - -c
+    env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    imagePullPolicy: Always
+  - name: uninstall-instances
+    args:
+      - uninstall
+      - -n=default
+      - --ignore-not-found
+      - --wait
+      - kuadrant-instances
+    command:
+      - helm
+    env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    imagePullPolicy: Always
+  - name: uninstall-operators
+    args:
+      - uninstall
+      - -n=default
+      - --ignore-not-found
+      - --wait
+      - kuadrant-operators
+    command:
+      - helm
+    env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    imagePullPolicy: Always
+  - name: delete-cert-manager-namespace
+    args:
+      - kubectl delete --ignore-not-found ns/cert-manager
+    command:
+      - /bin/bash
+      - -c
+    env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    imagePullPolicy: Always
+  - name: delete-kuadrant-crd
+    args:
+      - kubectl get crd -o name | grep "kuadrant" | xargs --no-run-if-empty kubectl delete
+    command:
+      - /bin/bash
+      - -c
+    env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    imagePullPolicy: Always
+  - name: uninstall-tools-instances
+    args:
+      - uninstall
+      - -n=default
+      - --ignore-not-found
+      - --wait
+      - tools-instances
+    command:
+      - helm
+    env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    imagePullPolicy: Always
+  - name: uninstall-tools-operators
+    args:
+      - uninstall
+      - -n=default
+      - --ignore-not-found
+      - --wait
+      - tools-operators
+    command:
+      - helm
+    env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    imagePullPolicy: Always
+
+  # Install steps
   - name: helm-install-tools-operators
     script: >
       helm install -n=default

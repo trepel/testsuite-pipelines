@@ -22,3 +22,4 @@ resources:
   - wait-for-valid-certificates.yaml
   - wait-till-osd-is-deleted.yaml
   - wait-till-osd-is-ready.yaml
+  - helm-uninstall.yaml
