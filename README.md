@@ -84,6 +84,12 @@ kubectl create secret generic aro-pull-secret --from-file=.dockerconfigjson=/pat
 kubectl create secret generic rapidast-storage-access-key --from-file=rapidast-sa-rhcl_key.json=/local/path/to/your-service-account_key.json -n ${PIPELINE_NAMESPACE}
 ```
 
+#### Resources required to interact with internal cluster management repository
+- Config map containing root certfticate of the managed gitlab instance
+```shell
+kubectl create configmap gitlab.ca --from-file=ca.pem=/local/path/to/ca.pem -n ${PIPELINE_NAMESPACE}
+```
+
 Pipeline execution
 ---
 1. Through the OpenShift Web Console

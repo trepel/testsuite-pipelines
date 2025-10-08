@@ -1,0 +1,63 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: delete-ocp-aws
+spec:
+  description: Delete AWS OCP cluster
+  params:
+    - name: cluster-name
+      type: string
+  volumes:
+    - name: gitlab-ca
+      configMap:
+        name: gitlab-ca
+  steps:
+    - computeResources:
+        limits:
+          cpu: '150m'
+          memory: 400Mi
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CLUSTER_MANAGEMENT_CI_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: CLUSTER_MANAGEMENT_CI_TOKEN
+              name: cluster-management-ci-token
+        - name: CLUSTER_MANAGEMENT_REPOSITORY
+          valueFrom:
+            secretKeyRef:
+              key: CLUSTER_MANAGEMENT_REPOSITORY
+              name: cluster-management-ci-token
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      name: delete-ocp-aws
+      volumeMounts:
+        - name: gitlab-ca
+          mountPath: /etc/pki/ca-trust/source/anchors
+          readOnly: true
+      command:
+        - /bin/bash
+        - -c
+        - |
+          set -euo pipefail
+
+          # Prepare git repository
+          update-ca-trust
+          CI_TOKEN=$(echo "$CLUSTER_MANAGEMENT_CI_TOKEN" | tr -d '\n')
+          REPOSITORY=$(echo "$CLUSTER_MANAGEMENT_REPOSITORY" | tr -d '\n')
+          git clone "https://ci_robot_account:$CI_TOKEN@$REPOSITORY"
+          git config --global user.email ci-robot-account@redhat.com
+          git config --global user.name "CI Robot"
+        
+          # Run osia clean
+          cd cluster-management
+          AWS_SHARED_CREDENTIALS_FILE=aws-credentials.conf
+          osia clean --cluster-name $(params.cluster-name)
+
+          # Remove secret as the cluster is being deleted
+          kubectl delete secret "$(params.cluster-name)-credentials" -n ${NAMESPACE} --ignore-not-found=true
+    
+      
