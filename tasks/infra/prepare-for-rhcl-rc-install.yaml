@@ -27,22 +27,6 @@ spec:
         #!/usr/bin/env bash
         set -evo pipefail
 
-        # Creates ICSP that allow to mirroring to brew
-        kubectl apply -f -<<EOF
-            apiVersion: operator.openshift.io/v1alpha1
-            kind: ImageContentSourcePolicy
-            metadata:
-              name: errata-from-brew
-            spec:
-              repositoryDigestMirrors:
-              - mirrors:
-                - brew.registry.redhat.io/rh-osbs
-                source: registry-proxy.engineering.redhat.com/rh-osbs
-              - mirrors:
-                  - brew.registry.redhat.io/rhcl-1
-                source: registry.redhat.io/rhcl-1
-        EOF
-
         # update global pull secret
         kubectl get secret/pull-secret -n openshift-config -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d > current-auths.json
 
