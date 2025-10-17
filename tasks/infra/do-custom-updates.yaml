@@ -1,0 +1,52 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: do-custom-updates
+spec:
+  description: 'Allow for patching custom resources and other custom updates'
+  params:
+    - name: kubeconfig-path
+      type: string
+  steps:
+    - name: do-custom-updates
+      computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      env:
+        - name: KUBECONFIG
+          value: $(params.kubeconfig-path)
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+
+        # Get the namespace of the Subsciption (typically kuadrant-system but it can be different)
+        namespace=$(kubectl get subscription --all-namespaces -o json | jq -r '.items[] | select(.metadata.name == "kuadrant-operator") | .metadata.namespace')
+        if [[ -z "$namespace" ]]; then
+            echo "Subcription 'kuadrant-operator' not found in any namespace."
+            exit 1
+        fi
+
+        # Limitador log level to DEBUG
+        kubectl patch limitador limitador --namespace $namespace --type merge --patch '{"spec":{"verbosity":3}}'
+        # Limitador disk storage
+        kubectl patch limitador limitador --namespace $namespace --type merge --patch '{"spec":{"storage":{"disk":{}}}}'
+        # Authorino log level
+        kubectl patch authorino authorino --namespace $namespace --type merge --patch '{"spec":{"logLevel":"debug"}}'
+        # Enable monitoring
+        kubectl patch kuadrant kuadrant-sample --namespace $namespace --type merge --patch '{"spec":{"observability":{"enable":true}}}'
+        # enable user workload monitoring
+        kubectl apply -n openshift-monitoring -f -<<EOF
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+                name: cluster-monitoring-config
+                namespace: openshift-monitoring
+            data:
+                config.yaml: |
+                    enableUserWorkload: true
+        EOF
+  workspaces:
+    - name: shared-workspace

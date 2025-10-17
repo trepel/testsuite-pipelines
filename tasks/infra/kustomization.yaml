@@ -23,3 +23,4 @@ resources:
   - wait-till-osd-is-deleted.yaml
   - wait-till-osd-is-ready.yaml
   - helm-uninstall.yaml
+  - do-custom-updates.yaml

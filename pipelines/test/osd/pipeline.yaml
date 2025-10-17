@@ -392,6 +392,18 @@ spec:
       workspaces:
         - name: shared-workspace
           workspace: shared-workspace
+    - name: do-custom-updates
+      params:
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
+      runAfter:
+        - operator-pod-restart
+      taskRef:
+        kind: Task
+        name: do-custom-updates
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
     - name: run-tests
       params:
         - name: testsuite-image
@@ -411,7 +423,7 @@ spec:
         - name: cluster-credentials
           value: $(tasks.get-osd-credentials.results.credentials-secret)
       runAfter:
-        - operator-pod-restart
+        - do-custom-updates
       taskRef:
         kind: Task
         name: run-tests
