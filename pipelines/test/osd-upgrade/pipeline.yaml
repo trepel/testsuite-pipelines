@@ -421,7 +421,7 @@ spec:
         name: run-tests
       workspaces:
         - name: shared-workspace
-    - name: pause-pipeline
+    - name: pause-pipeline-pre-upgrade
       runAfter:
         - run-tests-pre-upgrade
       taskRef:
@@ -432,12 +432,18 @@ spec:
         - name: kubeconfig-path
           value: $(tasks.kubectl-login.results.kubeconfig-path)
       runAfter:
-        - pause-pipeline
+        - pause-pipeline-pre-upgrade
       taskRef:
         kind: Task
         name: upgrade-to-latest
       workspaces:
         - name: shared-workspace
+    - name: pause-pipeline-post-upgrade
+      runAfter:
+        - upgrade-to-latest
+      taskRef:
+        kind: Task
+        name: pause-pipeline
     - name: run-tests-post-upgrade
       params:
         - name: testsuite-image
@@ -457,7 +463,7 @@ spec:
         - name: cluster-credentials
           value: $(tasks.get-osd-credentials.results.credentials-secret)
       runAfter:
-        - upgrade-to-latest
+        - pause-pipeline-post-upgrade
       taskRef:
         kind: Task
         name: run-tests
