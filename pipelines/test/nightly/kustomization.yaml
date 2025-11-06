@@ -11,6 +11,4 @@ components:
   - ../../../tasks/test/
 
 resources:
-  - eventlistener.yaml
-  - trigger-nightly-cronjob.yaml
   - pipeline.yaml

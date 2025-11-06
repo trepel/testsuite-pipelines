@@ -11,6 +11,4 @@ components:
   - ../../../tasks/deploy/
 
 resources:
-  - eventlistener.yaml
-  - trigger-nightly-update.yaml
   - pipeline.yaml
