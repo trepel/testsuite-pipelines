@@ -23,10 +23,6 @@ spec:
     name: gateway-crd
     type: string
     default: ""
-  - description: Keycloak subscription channel
-    name: keycloak-channel
-    type: string
-    default: stable-v26
   - description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
     name: additional-helm-flags
     type: string
@@ -74,8 +70,6 @@ spec:
         value: $(params.istio-provider)
       - name: gateway-crd
         value: $(params.gateway-crd)
-      - name: keycloak-channel
-        value: $(params.keycloak-channel)
       - name: operator-name
         value: $(params.operator-name)
       - name: kubeconfig-path

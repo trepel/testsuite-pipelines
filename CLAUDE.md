@@ -150,7 +150,6 @@ Manual builds should only be performed in emergencies. See README.md for manual 
 - `operator-name` - Operator name (`kuadrant-operator` or `rhcl-operator`)
 - `istio-provider` - Istio provider (`ossm3` recommended, `ocp` for OCP 4.19+ Gateway API-managed Istio)
 - `gateway-crd` - GatewayAPI CRD version (e.g., `v1.2.1`, `v1.3.0`, `v1.4.0`, empty for OCP 4.19+)
-- `keycloak-channel` - Keycloak subscription channel (default: `stable-v26`)
 - `additional-helm-flags` - Extra helm flags for operators/instances (e.g., `--set=kuadrant.installPlanApproval=Manual`)
 - `additional-helm-tools-flags` - Extra helm flags for tools (e.g., `--set=tools.keycloak.keycloakProvider=deployment`)
 

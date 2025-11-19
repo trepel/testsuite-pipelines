@@ -16,9 +16,6 @@ spec:
     - description: GatewayAPI CRD version. [v1.2.1, v1.3.0, v1.4.0] available; leave empty if installing on Openshift 4.19+.
       name: gateway-crd
       type: string
-    - description: Keycloak subscription channel
-      name: keycloak-channel
-      type: string
     - description: Path to workspace kubeconfig
       name: kubeconfig-path
       type: string
@@ -164,7 +161,6 @@ spec:
       --set=kuadrant.operatorName="$(params.operator-name)"
       --set=istio.istioProvider="$(params.istio-provider)"
       --set=gatewayAPI.version="$(params.gateway-crd)"
-      --set=tools.keycloak.operator.channel="$(params.keycloak-channel)"
       --set=tools.enabled=true
       $(params.additional-helm-flags)
       --wait --debug
@@ -188,7 +184,6 @@ spec:
       --set=kuadrant.operatorName="$(params.operator-name)"
       --set=istio.istioProvider="$(params.istio-provider)"
       --set=gatewayAPI.version="$(params.gateway-crd)"
-      --set=tools.keycloak.operator.channel="$(params.keycloak-channel)"
       --set=tools.enabled=true
       $(params.additional-helm-flags)
       --wait --debug
