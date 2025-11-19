@@ -14,15 +14,15 @@ spec:
   - description: A 'ossm3' for Openshift Service mesh v3, 'ocp' for installing on Openshift 4.19+
     name: istio-provider
     type: string
-    default: ossm3
+    default: ocp
   - description: Kuadrant operator name. 'kuadrant-operator' or 'rhcl-operator'
     name: operator-name
     type: string
     default: kuadrant-operator
-  - description: GatewayAPI CRD version. v1.0.0, v1.1.0, v1.2.1, v1.3.0 available; Leave empty if installing on ocp4.19+
+  - description: GatewayAPI CRD version. [v1.2.1, v1.3.0, v1.4.0] available; Installation skipped if 'ocp' istio-provider is used
     name: gateway-crd
     type: string
-    default: v1.3.0
+    default: v1.4.0
   - description: Keycloak subscription channel
     name: keycloak-channel
     type: string
