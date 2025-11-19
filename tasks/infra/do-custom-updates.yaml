@@ -1,0 +1,37 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: do-custom-updates
+spec:
+  description: 'Allow for patching custom resources and other custom updates'
+  params:
+    - name: kubeconfig-path
+      type: string
+  steps:
+    - name: do-custom-updates
+      computeResources:
+        limits:
+          cpu: '100m'
+          memory: 64Mi
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      env:
+        - name: KUBECONFIG
+          value: $(params.kubeconfig-path)
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+
+        # enable user workload monitoring
+        kubectl apply -n openshift-monitoring -f -<<EOF
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+                name: cluster-monitoring-config
+                namespace: openshift-monitoring
+            data:
+                config.yaml: |
+                    enableUserWorkload: true
+        EOF
+  workspaces:
+    - name: shared-workspace
