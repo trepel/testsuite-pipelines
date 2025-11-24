@@ -2,16 +2,23 @@ group "default" {
   targets = ["testsuite-pipelines-tools"]
 }
 
-variable "TAG" {
+variable "VERSION" {
   validation {
-    condition = TAG == regex("^[0-9]+.[0-9]+", TAG)
-    error_message = "TAG must be in a version format x.y for example 0.1"
+    condition = VERSION == "" || can(regex("^v[0-9]+\\.[0-9]+\\.[0-9]+$", VERSION))
+    error_message = "VERSION must be in semantic format - for example v0.0.1"
   }
+}
+
+variable "OUTPUT" {
+  default = "type=image"
 }
 
 target "testsuite-pipelines-tools" {
   no-cache = true
-  tags = ["quay.io/kuadrant/testsuite-pipelines-tools:latest", "quay.io/kuadrant/testsuite-pipelines-tools:${TAG}"]
+  tags = compact(concat(
+      ["quay.io/kuadrant/testsuite-pipelines-tools:latest"],
+      VERSION != "" ? ["quay.io/kuadrant/testsuite-pipelines-tools:${VERSION}"] : []
+    ))
   platforms = ["linux/amd64", "linux/arm64"]
-  output = ["type=registry"]
+  output = [OUTPUT]
 }
