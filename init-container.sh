@@ -7,7 +7,7 @@ case "${TARGETPLATFORM}" in
     *) exit 1 ;;
 esac
 
-microdnf -y install jq tar git buildah findutils unzip
+microdnf -y install jq tar git buildah findutils unzip python3.11 python3.11-pip
 
 curl -LSs -o /usr/local/bin/ocm "https://github.com/openshift-online/ocm-cli/releases/download/$(curl -Lfs https://api.github.com/repos/openshift-online/ocm-cli/releases/latest \
     | jq -r .tag_name)/ocm-linux-${ARCH}" \
@@ -34,3 +34,5 @@ curl -LSs -o awscli.zip "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_ARC
 rpm --import https://packages.microsoft.com/keys/microsoft.asc \
     && rpm -Uvh https://packages.microsoft.com/config/rhel/9.0/packages-microsoft-prod.rpm \
     && microdnf -y install azure-cli
+
+python3.11 -m pip install --no-cache-dir osia

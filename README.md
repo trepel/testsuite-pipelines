@@ -120,11 +120,24 @@ kubectl patch tektonconfig config --type=merge -p '{"spec":{"pruner":{"disabled"
 
 Pipeline image
 ---
-If `Dockerfile` or `init.container.sh` has been modified, use either `podman` or `docker` to rebuild it.
+**The CI handles image builds and pushes automatically.** Manual pushes to the registry are not encouraged and should only be performed in exceptional circumstances by members of the [QE Team](https://quay.io/organization/kuadrant/teams/qe) or the `kuadrant+qe` robot account.
 
-Set the TAG env variable to an increment of the last version in https://quay.io/repository/kuadrant/testsuite-pipelines-tools?tab=tags
+<details>
+<summary>Manual push instructions (emergency use only)</summary>
 
-Only members of [QE Team](https://quay.io/organization/kuadrant/teams/qe) and `kuadrant+qe` robot account are allowed to do the push.
+Set the VERSION env variable to an increment of the last version in https://quay.io/repository/kuadrant/testsuite-pipelines-tools?tab=tags:
+
+```shell
+export VERSION=v1.x.x
+```
+
+### Docker
+Install [docker buildx](https://github.com/docker/buildx) and QEMU packages, ensure you're logged into quay.io, then run:
+
+```shell
+export OUTPUT="type=registry"  # Required to push (default is type=image for local builds)
+docker buildx bake
+```
 
 ### Podman
 You might need to install QEMU User Static Emulation and enable Binary Format Support.
@@ -134,12 +147,12 @@ sudo dnf install qemu-user-static
 sudo systemctl start systemd-binfmt.service
 ```
 
-It is also possible to use container:
+Or use a container:
 ```shell
 podman run --rm --privileged mirror.gcr.io/multiarch/qemu-user-static --reset -p yes
 ```
 
-To build multiarch (AMD64 and ARM64) image execute:
+To build multiarch (AMD64 and ARM64) image:
 ```shell
 podman build --no-cache --platform linux/arm64 -t testsuite-pipelines-tools:latest-arm64 .
 podman build --no-cache --platform linux/amd64 -t testsuite-pipelines-tools:latest-amd64 .
@@ -148,13 +161,7 @@ podman manifest create testsuite-pipelines-tools:latest
 podman manifest add testsuite-pipelines-tools:latest testsuite-pipelines-tools:latest-arm64
 podman manifest add testsuite-pipelines-tools:latest testsuite-pipelines-tools:latest-amd64
 podman manifest push testsuite-pipelines-tools:latest quay.io/kuadrant/testsuite-pipelines-tools:latest
-export TAG=0.x;podman manifest push testsuite-pipelines-tools:latest quay.io/kuadrant/testsuite-pipelines-tools:$TAG
+podman manifest push testsuite-pipelines-tools:latest quay.io/kuadrant/testsuite-pipelines-tools:$VERSION
 ```
 
-### Docker
-Install [docker buildx](https://github.com/docker/buildx)
-(note: also install QEMU packages), be sure you are logged in quay.io and run:
-
-```shell
-TAG=0.x docker buildx bake 
-```
+</details>
