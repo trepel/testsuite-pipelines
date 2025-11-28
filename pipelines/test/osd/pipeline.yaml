@@ -42,7 +42,7 @@ spec:
       name: cluster-lifespan
       type: string
 # Kuadrant/RHCL installation related parameters
-    - default: quay.io/kuadrant/kuadrant-operator-catalog:v1.2.0
+    - default: quay.io/kuadrant/kuadrant-operator-catalog:v1.3.1
       description: Kuadrant/RHCL index image, leave empty to install current RHCL GA
       name: index-image
       type: string
@@ -54,12 +54,12 @@ spec:
       description: Operator name (kuadrant-operator, rhcl-operator)
       name: operator-name
       type: string
-    - default: ocp
-      description: Istio provider (ossm3, ocp), use ossm3 for OCP v4.18 and before
+    - default: ossm3
+      description: Istio provider (ossm3, ocp); 'ossm3' (recommended for all Openshift versions), 'ocp' for installing Istio managed by Gateway API on OCP v4.19+ (not recommended: mTLS is not supported).
       name: istio-provider
       type: string
     - default: ""
-      description: GatewayAPI CRD version. v1.0.0, v1.1.0, v1.2.1, v1.3.0 available; Leave empty if installing on OCP v4.19+
+      description: GatewayAPI CRD version. [v1.2.1, v1.3.0, v1.4.0] available; leave empty if installing on Openshift 4.19+.
       name: gateway-crd
       type: string
     - default: stable-v26
