@@ -11,18 +11,18 @@ spec:
     name: cluster-credentials
     type: string
     default: openshift-pipelines-credentials
-  - description: A 'ossm3' for Openshift Service mesh v3, 'ocp' for installing on Openshift 4.19+
+  - description: Istio provider (ossm3, ocp); 'ossm3' (recommended for all Openshift versions), 'ocp' for installing Istio managed by Gateway API on OCP v4.19+ (not recommended: mTLS is not supported).
     name: istio-provider
     type: string
-    default: ocp
+    default: ossm3
   - description: Kuadrant operator name. 'kuadrant-operator' or 'rhcl-operator'
     name: operator-name
     type: string
     default: kuadrant-operator
-  - description: GatewayAPI CRD version. [v1.2.1, v1.3.0, v1.4.0] available; Installation skipped if 'ocp' istio-provider is used
+  - description: GatewayAPI CRD version. [v1.2.1, v1.3.0, v1.4.0] available; leave empty if installing on Openshift 4.19+.
     name: gateway-crd
     type: string
-    default: v1.4.0
+    default: ""
   - description: Keycloak subscription channel
     name: keycloak-channel
     type: string

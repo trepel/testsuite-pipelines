@@ -14,7 +14,7 @@ spec:
   - description: Kuadrant image url
     name: index-image
     type: string
-    default: quay.io/kuadrant/kuadrant-operator-catalog:v1.2.0
+    default: quay.io/kuadrant/kuadrant-operator-catalog:v1.3.1
   - description: Kuadrant image channel. Can be 'preview' for nightlies and 'stable' for releases
     name: channel
     type: string
@@ -23,14 +23,14 @@ spec:
     name: operator-name
     type: string
     default: kuadrant-operator
-  - description: A 'ossm3' for Openshift Service mesh v3, 'ocp' for installing on Openshift 4.19+
+  - description: Istio provider (ossm3, ocp); 'ossm3' (recommended for all Openshift versions), 'ocp' for installing Istio managed by Gateway API on OCP v4.19+ (not recommended: mTLS is not supported).
     name: istio-provider
     type: string
-    default: ocp
-  - description: GatewayAPI CRD version. [v1.2.1, v1.3.0, v1.4.0] available; Installation skipped if 'ocp' istio-provider is used
+    default: ossm3
+  - description: GatewayAPI CRD version. [v1.2.1, v1.3.0, v1.4.0] available; leave empty if installing on Openshift 4.19+.
     name: gateway-crd
     type: string
-    default: v1.4.0
+    default: ""
   - description: Keycloak subscription channel
     name: keycloak-channel
     type: string
