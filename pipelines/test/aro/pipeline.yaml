@@ -97,7 +97,7 @@ spec:
       name: launch-description
       type: string
     - default: testsuite
-      description: Report Portal Project to store test results (testsuite or nightly-testsuite typically)
+      description: Report Portal Project to store test results (e.g. testsuite, nightly-testsuite, releases)
       name: rp-project
       type: string
     - default: true
