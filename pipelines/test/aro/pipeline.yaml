@@ -43,7 +43,7 @@ spec:
       name: operator-name
       type: string
     - default: ossm3
-      description: Istio provider (ossm3, ocp); 'ossm3' (recommended for all Openshift versions), 'ocp' for installing Istio managed by Gateway API on OCP v4.19+ (not recommended: mTLS is not supported).
+      description: Istio provider (ossm3, ocp); 'ossm3' (recommended for all Openshift versions), 'ocp' for installing Istio managed by Gateway API on OCP v4.19+ (not recommended - mTLS is not supported)
       name: istio-provider
       type: string
     - default: ""
