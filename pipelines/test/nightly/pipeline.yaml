@@ -47,7 +47,7 @@ spec:
       name: launch-description
       type: string
     - default: nightly-testsuite
-      description: Report Portal Project to store test results (e.g. testsuite, nightly-testsuite)
+      description: Report Portal Project to store test results (e.g. testsuite, nightly-testsuite, releases)
       name: rp-project
       type: string
     - default: true
