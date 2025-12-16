@@ -118,6 +118,11 @@ kubectl patch tektonconfig config --type merge -p "{\"spec\": {\"pipeline\": {\"
 kubectl patch tektonconfig config --type=merge -p '{"spec":{"pruner":{"disabled":false,"keep":null,"keep-since":10080,"resources":["pipelinerun"],"schedule":"0 0 * * 0"}}}'
 ```
 
+* Synchronize repository pipelines structure with CLAUDE.md, if structure has been changed (Note: if structure has been changed significantly include the updated CLAUDE.md in your PR.)
+```shell
+claude /sync-structure
+```
+
 Pipeline image
 ---
 **The CI handles image builds and pushes automatically.** Manual pushes to the registry are not encouraged and should only be performed in exceptional circumstances by members of the [QE Team](https://quay.io/organization/kuadrant/teams/qe) or the `kuadrant+qe` robot account.
