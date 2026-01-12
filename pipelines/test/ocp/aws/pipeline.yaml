@@ -1,0 +1,235 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: test-ocp-aws
+spec:
+  params:
+    # Cluster related parameters
+    - name: cluster-name
+      type: string
+    - name: installer-version
+      type: string
+      default: "stable"
+    - name: region
+      type: string
+      default: "us-east-1"
+    - name: master-size
+      type: string
+      default: "m6g.xlarge"
+    - name: worker-size
+      type: string
+      default: "m6g.large"
+    - name: installer-arch
+      type: string
+      default: "arm64"
+    # Kuadrant/RHCL installation related parameters
+    - default: quay.io/kuadrant/kuadrant-operator-catalog:v1.3.1
+      description: Kuadrant/RHCL index image, leave empty to install current RHCL GA
+      name: index-image
+      type: string
+    - default: stable
+      description: Kuadrant channel (stable, preview)
+      name: channel
+      type: string
+    - default: kuadrant-operator
+      description: Operator name (kuadrant-operator, rhcl-operator)
+      name: operator-name
+      type: string
+    - default: ossm3
+      description: Istio provider (ossm3, ocp); 'ossm3' (recommended for all Openshift versions), 'ocp' for installing Istio managed by Gateway API on OCP v4.19+ (not recommended: mTLS is not supported).
+      name: istio-provider
+      type: string
+    - default: ""
+      description: GatewayAPI CRD version. [v1.2.1, v1.3.0, v1.4.0] available; leave empty if installing on Openshift 4.19+.
+      name: gateway-crd
+      type: string
+    - default: stable-v26
+      description: Keycloak subscription channel
+      name: keycloak-channel
+      type: string
+    - default: ""
+      description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
+      name: additional-helm-flags
+      type: string
+    - default: ""
+      description: Additional flags for tools helm, example '--set=tools.keycloak.keycloakProvider=deployment --set=tools.valkey.enable=false'"
+      name: additional-helm-tools-flags
+      type: string
+    # Testsuite related parameters
+    - default: 'quay.io/kuadrant/testsuite:unstable'
+      description: Testsuite image
+      name: testsuite-image
+      type: string
+    - default: kuadrant
+      description: Openshift project
+      name: project
+      type: string
+    - default: test
+      description: Makefile target for tests
+      name: make-target
+      type: string
+    - default: ""
+      description: Pytest flags to use with Make (flags="${pytest-flags}" make kuadrant)
+      name: pytest-flags
+      type: string
+    - default: pipeline-settings-aws
+      description: Config Map with settings for the testsuite
+      name: settings-cm
+      type: string
+    - default: ""
+      description: Additional env for testsuite container separated with spaces (e.g. KUADRANT_CONTROL_PLANE__provider_secret=gcp-credentials KUADRANT_KEYCLOAK__url="https://my-sso.net")
+      name: additional-env
+      type: string
+    # Report Portal related parameters
+    - default: full-cycle-ocp-aws
+      description: Prefix of the launch name saved in report portal (nightly, username, manual, etc.). In case of release candidate testing use kuadrant-v<version>, rhcl-v<version>, or authorino-v<version>
+      name: launch-name
+      type: string
+    - default: ""
+      description: Optional launch description for Report Portal
+      name: launch-description
+      type: string
+    - default: testsuite
+      description: Report Portal Project to store test results (testsuite or nightly-testsuite typically)
+      name: rp-project
+      type: string
+    - default: true
+      description: If set to 'true' upload test results to Report Portal
+      name: upload-results
+      type: string
+    # Cleanup
+    - default: false
+      description: If set to 'true' cleanup will be done
+      name: cleanup
+      type: string
+  workspaces:
+    - name: shared-workspace
+      description: "Workspace to store cluster state files"
+  tasks:
+    - name: provision-ocp-aws
+      params:
+        - name: cluster-name
+          value: $(params.cluster-name)
+        - name: installer-version
+          value: $(params.installer-version)
+        - name: region
+          value: $(params.region)
+        - name: master-size
+          value: $(params.master-size)
+        - name: worker-size
+          value: $(params.worker-size)
+        - name: installer-arch
+          value: $(params.installer-arch)
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+      taskRef:
+        kind: Task
+        name: provision-ocp-aws
+    - name: helm-deploy
+      retries: 3
+      params:
+        - name: index-image
+          value: $(params.index-image)
+        - name: channel
+          value: $(params.channel)
+        - name: istio-provider
+          value: $(params.istio-provider)
+        - name: operator-name
+          value: $(params.operator-name)
+        - name: kubeconfig-path
+          value: $(tasks.provision-ocp-aws.results.kubeconfig-path)
+        - name: gateway-crd
+          value: $(params.gateway-crd)
+        - name: keycloak-channel
+          value: $(params.keycloak-channel)
+        - name: additional-helm-flags
+          value: $(params.additional-helm-flags)
+        - name: additional-helm-tools-flags
+          value: $(params.additional-helm-tools-flags)
+      runAfter:
+        - provision-ocp-aws
+      taskRef:
+        kind: Task
+        name: helm-deploy
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: do-custom-updates
+      params:
+        - name: kubeconfig-path
+          value: $(tasks.provision-ocp-aws.results.kubeconfig-path)
+      runAfter:
+        - helm-deploy
+      taskRef:
+        kind: Task
+        name: do-custom-updates
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: run-tests
+      timeout: "2h"
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: $(params.make-target)
+        - name: pytest-flags
+          value: $(params.pytest-flags)
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: additional-env
+          value: $(params.additional-env)
+        - name: kubeconfig-path
+          value: $(tasks.provision-ocp-aws.results.kubeconfig-path)
+        - name: cluster-credentials
+          value: $(tasks.provision-ocp-aws.results.credentials-secret)
+      runAfter:
+        - do-custom-updates
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: upload-results
+      when:
+        - input: $(params.upload-results)
+          operator: in
+          values: ["true"]
+      params:
+        - name: launch-name
+          value: $(params.launch-name)
+        - name: launch-description
+          value: $(params.launch-description)
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: make-target
+          value: $(params.make-target)
+        - name: rp-project
+          value: $(params.rp-project)
+        - name: ocp-version
+          value: $(tasks.provision-ocp-aws.results.ocp-version)
+      runAfter:
+        - run-tests
+      taskRef:
+        kind: Task
+        name: upload-results
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: delete-ocp-aws
+      when:
+        - input: $(params.cleanup)
+          operator: in
+          values: ["true"]
+      runAfter:
+        - upload-results
+      params:
+        - name: cluster-name
+          value: $(params.cluster-name)
+      taskRef:
+        kind: Task
+        name: delete-ocp-aws

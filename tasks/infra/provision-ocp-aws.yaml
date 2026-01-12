@@ -1,0 +1,134 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: provision-ocp-aws
+spec:
+  description: 'Provisions OCP'
+  params:
+    - name: cluster-name
+      type: string
+    - name: installer-version
+      type: string
+    - name: region
+      type: string
+      default: "us-east-1"
+    - name: master-size
+      type: string
+      default: "m6g.xlarge"
+    - name: worker-size
+      type: string
+      default: "m6g.large"
+    - name: installer-arch
+      type: string
+      default: "arm64"
+  results:
+    - name: kubeconfig-path
+      description: Path to new kubeconfig in the workspace
+    - name: credentials-secret
+      description: secret name with credentials
+    - name: ocp-version
+      description: OCP version that was installed
+  workspaces:
+    - name: shared-workspace
+      description: "Shared workspace to persist cluster state files between tasks"
+  volumes:
+    - name: gitlab-ca
+      configMap:
+        name: gitlab-ca
+  steps:
+    - computeResources:
+        limits:
+          cpu: '2000m'        # 2 CPU cores
+          memory: '4Gi'        # 4GB RAM
+        requests:
+          cpu: '1000m'        # 1 CPU core  
+          memory: '2Gi'        # 2GB RAM
+      env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CLUSTER_MANAGEMENT_CI_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: CLUSTER_MANAGEMENT_CI_TOKEN
+              name: cluster-management-ci-token
+        - name: CLUSTER_MANAGEMENT_REPOSITORY
+          valueFrom:
+            secretKeyRef:
+              key: CLUSTER_MANAGEMENT_REPOSITORY
+              name: cluster-management-ci-token
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      name: provision-aws-ocp
+      volumeMounts:
+        - name: gitlab-ca
+          mountPath: /etc/pki/ca-trust/source/anchors
+          readOnly: true
+      command:
+        - /bin/bash
+        - -c
+        - |
+          set -euo pipefail
+
+          # Prepare git repository
+          update-ca-trust
+          CI_TOKEN=$(echo "$CLUSTER_MANAGEMENT_CI_TOKEN" | tr -d '\n')
+          REPOSITORY=$(echo "$CLUSTER_MANAGEMENT_REPOSITORY" | tr -d '\n')
+          git clone "https://ci_robot_account:$CI_TOKEN@$REPOSITORY"
+          git config --global user.email ci-robot-account@redhat.com
+          git config --global user.name "CI Robot"
+
+          # Run osia install
+          cd cluster-management
+          AWS_SHARED_CREDENTIALS_FILE=aws-credentials.conf
+          osia install \
+            --installer-version $(params.installer-version) \
+            --cluster-name $(params.cluster-name) \
+            --cloud aws \
+            --cloud-env kua-aws \
+            --master-flavor $(params.master-size) \
+            --worker-flavor $(params.worker-size) \
+            --list-of-regions $(params.region) \
+            --installer-arch $(params.installer-arch) \
+            --dns-provider route53 
+
+          # Get cluster credentials
+          export username=$(grep "Login to the console with user:" $(params.cluster-name)/.openshift_install.log | sed 's/.*user: \\"\([^"]*\)\\".*/\1/')
+          export password=$(grep "Login to the console with user:" $(params.cluster-name)/.openshift_install.log | sed 's/.*password: \\"\([^"]*\)\\".*/\1/')
+
+          # Validate username and password were found
+          if [ -z "$username" ] || [ -z "$password" ]; then
+            echo "ERROR: Failed to retrieve cluster credentials from install log"
+            exit 1
+          fi
+
+          # Create secret with cluster credentials (delete if exists first)
+          echo -n "$(params.cluster-name)-credentials" | tee $(results.credentials-secret.path)
+          kubectl delete secret "$(params.cluster-name)-credentials" -n ${NAMESPACE} --ignore-not-found=true
+          kubectl create secret generic "$(params.cluster-name)-credentials" --from-literal=KUBE_USER="$username" --from-literal=KUBE_PASSWORD="$password" -n ${NAMESPACE}
+
+          # Get kubeconfig path
+          mv /cluster-management/$(params.cluster-name)/auth/kubeconfig /workspace/shared-workspace/kubeconfig
+          export KUBECONFIG=/workspace/shared-workspace/kubeconfig
+          echo -n $KUBECONFIG | tee $(results.kubeconfig-path.path)
+
+          # Get OCP version from installers directory
+          OCP_VERSION=$(ls -1 /cluster-management/installers | head -n 1)
+          
+          # Validate OCP version was found
+          if [ -z "$OCP_VERSION" ]; then
+            echo "ERROR: Failed to retrieve OCP version from /installers"
+            exit 1
+          fi
+          
+          echo "OCP Version: $OCP_VERSION"
+          echo -n $OCP_VERSION | tee $(results.ocp-version.path)
+
+          
+
+          
+          
+
+            
+      
