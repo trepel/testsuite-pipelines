@@ -8,6 +8,10 @@ spec:
       description: Testsuite image to run tests on
       name: testsuite-image
       type: string
+    - default: 'quay.io/kuadrant/testsuite-ui:unstable'
+      description: Testsuite UI image to run UI tests on
+      name: testsuite-ui-image
+      type: string
     - description: API URL of the Openshift cluster
       name: kube-api
       type: string
@@ -345,6 +349,31 @@ spec:
       workspaces:
         - name: shared-workspace
 
+    - name: run-tests-ui
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-ui-image)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: ui
+        - name: pytest-flags
+          value: $(params.pytest-flags)
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: additional-env
+          value: $(params.additional-env)
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login-second-cluster.results.kubeconfig-path)
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
+      runAfter:
+        - run-tests-multicluster-azure
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
   finally:
     - name: upload-results
       when:

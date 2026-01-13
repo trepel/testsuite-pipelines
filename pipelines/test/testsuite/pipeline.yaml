@@ -5,7 +5,7 @@ metadata:
 spec:
   params:
     - default: 'quay.io/kuadrant/testsuite:unstable'
-      description: Testsuite image to run tests on
+      description: Testsuite image to run tests on (use 'quay.io/kuadrant/testsuite-ui:unstable' for UI tests)
       name: testsuite-image
       type: string
     - description: API URL of the Openshift cluster
