@@ -34,6 +34,15 @@ spec:
     args:
       - >-
         for crd in $(kubectl get crd -o name | grep "kuadrant" | sed 's/.*\/\(.*\)/\1/'); do
+            if [ "$crd" = "dnsrecords.kuadrant.io" ]; then
+                for record in $(kubectl get --chunk-size=0 -o name -n "kuadrant" "$crd"); do
+                    if kubectl get -n "kuadrant" $record -o jsonpath='{.status.conditions}' | grep "The dns provider could not be loaded"; then
+                       echo "Force deleting (deleting finalizers) due to missing secret on: $record";
+                       kubectl delete "$record" -n "kuadrant" --wait=false;
+                       kubectl patch "$record" -n "kuadrant" --type=merge -p '{"metadata":{"finalizers":null}}';
+                    fi
+                done
+            fi 
             kubectl get --chunk-size=0 -o name -n "kuadrant" "$crd" |\
             xargs --no-run-if-empty -P 20 -n 1 kubectl delete --ignore-not-found -n "kuadrant"
         done
