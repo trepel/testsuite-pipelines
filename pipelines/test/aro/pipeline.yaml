@@ -50,10 +50,6 @@ spec:
       description: GatewayAPI CRD version. [v1.2.1, v1.3.0, v1.4.0] available; leave empty if installing on Openshift 4.19+.
       name: gateway-crd
       type: string
-    - default: stable-v26
-      description: Keycloak subscription channel
-      name: keycloak-channel
-      type: string
     - default: ""
       description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
       name: additional-helm-flags
@@ -204,8 +200,6 @@ spec:
           value: $(tasks.kubectl-login.results.kubeconfig-path)
         - name: gateway-crd
           value: $(params.gateway-crd)
-        - name: keycloak-channel
-          value: $(params.keycloak-channel)
         - name: additional-helm-flags
           value: $(params.additional-helm-flags)
         - name: additional-helm-tools-flags
