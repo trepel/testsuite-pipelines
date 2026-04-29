@@ -234,7 +234,7 @@ spec:
           value: $(params.cluster-credentials)
       runAfter:
         - run-tests-kuadrant
-        - run-tests-authorino-standalone
+        - run-tests-ui
       taskRef:
         kind: Task
         name: run-tests
@@ -391,7 +391,7 @@ spec:
         - name: cluster-credentials
           value: $(params.cluster-credentials)
       runAfter:
-        - run-tests-multicluster-azure
+        - run-tests-authorino-standalone
       taskRef:
         kind: Task
         name: run-tests
