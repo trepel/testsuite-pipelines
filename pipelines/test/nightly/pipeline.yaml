@@ -42,6 +42,9 @@ spec:
     - description: API URL of the second Openshift cluster for multi-cluster tests
       name: kube-api-second
       type: string
+    - description: API URL of the third Openshift cluster
+      name: kube-api-third
+      type: string
     - default: nightly
       description: Prefix of the launch name saved in report portal (nightly, username, manual, etc.). In case of release candidate testing use kuadrant-v<version>, rhcl-v<version>, or authorino-v<version>
       name: launch-name
@@ -76,6 +79,32 @@ spec:
         name: kubectl-login
       workspaces:
         - name: shared-workspace
+    - name: kubectl-login-second-cluster
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: kube-api
+          value: $(params.kube-api-second)
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
+      taskRef:
+        kind: Task
+        name: kubectl-login
+      workspaces:
+        - name: shared-workspace
+    - name: kubectl-login-third-cluster
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: kube-api
+          value: $(params.kube-api-third)
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
+      taskRef:
+        kind: Task
+        name: kubectl-login
+      workspaces:
+        - name: shared-workspace
     - name: collect-info
       params:
         - name: testsuite-image
@@ -85,10 +114,11 @@ spec:
         - name: kubeconfig-path
           value: $(tasks.kubectl-login.results.kubeconfig-path)
         - name: additional-env
-          value: 'KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path)'
+          value: 'KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path) KUADRANT_CONTROL_PLANE__cluster3__kubeconfig_path=$(tasks.kubectl-login-third-cluster.results.kubeconfig-path)'
       runAfter:
         - kubectl-login
         - kubectl-login-second-cluster
+        - kubectl-login-third-cluster
       taskRef:
         kind: Task
         name: collect-info
@@ -119,19 +149,6 @@ spec:
         name: run-tests
       workspaces:
         - name: shared-workspace
-    - name: kubectl-login-second-cluster
-      params:
-        - name: testsuite-image
-          value: $(params.testsuite-image)
-        - name: kube-api
-          value: $(params.kube-api-second)
-        - name: cluster-credentials
-          value: $(params.cluster-credentials)
-      taskRef:
-        kind: Task
-        name: kubectl-login
-      workspaces:
-        - name: shared-workspace
     - name: run-tests-authorino-standalone
       params:
         - name: testsuite-image
@@ -157,27 +174,26 @@ spec:
         name: run-tests
       workspaces:
         - name: shared-workspace
-    - name: run-tests-multicluster
+    - name: run-tests-ui
       params:
         - name: testsuite-image
-          value: $(params.testsuite-image)
+          value: $(params.testsuite-ui-image)
         - name: project
           value: $(params.project)
-        - name: settings-cm
-          value: $(params.settings-cm)
         - name: make-target
-          value: multicluster
+          value: ui
         - name: pytest-flags
           value: $(params.pytest-flags)
+        - name: settings-cm
+          value: $(params.settings-cm)
         - name: additional-env
-          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path)'
+          value: $(params.additional-env)
         - name: kubeconfig-path
-          value: $(tasks.kubectl-login.results.kubeconfig-path)
+          value: $(tasks.kubectl-login-third-cluster.results.kubeconfig-path)
         - name: cluster-credentials
           value: $(params.cluster-credentials)
       runAfter:
-        - run-tests-kuadrant
-        - run-tests-authorino-standalone
+        - collect-info
       taskRef:
         kind: Task
         name: run-tests
@@ -202,7 +218,33 @@ spec:
         - name: cluster-credentials
           value: $(params.cluster-credentials)
       runAfter:
-        - run-tests-multicluster
+        - run-tests-kuadrant
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+    - name: run-tests-multicluster
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: project
+          value: $(params.project)
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: make-target
+          value: multicluster
+        - name: pytest-flags
+          value: $(params.pytest-flags)
+        - name: additional-env
+          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-third-cluster.results.kubeconfig-path)'
+        - name: kubeconfig-path
+          value: $(tasks.kubectl-login-second-cluster.results.kubeconfig-path)
+        - name: cluster-credentials
+          value: $(params.cluster-credentials)
+      runAfter:
+        - run-tests-authorino-standalone
+        - run-tests-ui
       taskRef:
         kind: Task
         name: run-tests
@@ -223,11 +265,11 @@ spec:
         - name: additional-env
           value: "$(params.additional-env) KUADRANT_CONTROL_PLANE__provider_secret=azure-credentials"
         - name: kubeconfig-path
-          value: $(tasks.kubectl-login-second-cluster.results.kubeconfig-path)
+          value: $(tasks.kubectl-login.results.kubeconfig-path)
         - name: cluster-credentials
           value: $(params.cluster-credentials)
       runAfter:
-        - run-tests-multicluster
+        - run-tests-dnstls-gcp
       taskRef:
         kind: Task
         name: run-tests
@@ -246,40 +288,13 @@ spec:
         - name: settings-cm
           value: $(params.settings-cm)
         - name: additional-env
-          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path)'
-        - name: kubeconfig-path
-          value: $(tasks.kubectl-login.results.kubeconfig-path)
-        - name: cluster-credentials
-          value: $(params.cluster-credentials)
-      runAfter:
-        - run-tests-dnstls-gcp
-        - run-tests-dnstls-azure
-      taskRef:
-        kind: Task
-        name: run-tests
-      workspaces:
-        - name: shared-workspace
-    - name: run-tests-ui
-      params:
-        - name: testsuite-image
-          value: $(params.testsuite-ui-image)
-        - name: project
-          value: $(params.project)
-        - name: make-target
-          value: ui
-        - name: pytest-flags
-          value: $(params.pytest-flags)
-        - name: settings-cm
-          value: $(params.settings-cm)
-        - name: additional-env
-          value: $(params.additional-env)
+          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-third-cluster.results.kubeconfig-path)'
         - name: kubeconfig-path
           value: $(tasks.kubectl-login-second-cluster.results.kubeconfig-path)
         - name: cluster-credentials
           value: $(params.cluster-credentials)
       runAfter:
-        - run-tests-dnstls-gcp
-        - run-tests-dnstls-azure
+        - run-tests-multicluster
       taskRef:
         kind: Task
         name: run-tests
