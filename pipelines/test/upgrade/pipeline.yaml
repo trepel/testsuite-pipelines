@@ -33,6 +33,10 @@ spec:
       description: GatewayAPI CRD version. [v1.2.1, v1.3.0, v1.4.0] available; leave empty if installing on Openshift 4.19+.
       name: gateway-crd
       type: string
+    - default: ""
+      description: Extensions image to overwrite default one.
+      name: extensions-image
+      type: string
     - default: "--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=rhcl-operator.v1.2.1"
       description: Additional flags for helm install command, update default value for desired "upgrade from" version here as needed
       name: additional-helm-flags
@@ -133,6 +137,8 @@ spec:
           value: $(tasks.kubectl-login.results.kubeconfig-path)
         - name: gateway-crd
           value: $(params.gateway-crd)
+        - name: extensions-image
+          value: $(params.extensions-image)
         - name: additional-helm-flags
           value: $(params.additional-helm-flags)
         - name: additional-helm-tools-flags

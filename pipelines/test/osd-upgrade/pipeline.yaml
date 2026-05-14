@@ -63,6 +63,10 @@ spec:
       name: gateway-crd
       type: string
     - default: ""
+      description: Extensions image to overwrite default one.
+      name: extensions-image
+      type: string
+    - default: ""
       description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
       name: additional-helm-flags
       type: string
@@ -368,6 +372,8 @@ spec:
           value: $(tasks.kubectl-login.results.kubeconfig-path)
         - name: gateway-crd
           value: $(params.gateway-crd)
+        - name: extensions-image
+          value: $(params.extensions-image)
         - name: additional-helm-flags
           value: $(params.additional-helm-flags)
         - name: additional-helm-tools-flags

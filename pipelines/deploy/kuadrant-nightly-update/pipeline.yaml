@@ -78,6 +78,8 @@ spec:
         value: $(params.operator-name)
       - name: kubeconfig-path
         value: $(tasks.kubectl-login.results.kubeconfig-path)
+      - name: extensions-image
+        value: $(params.extensions-image)
       - name: additional-helm-flags
         value: $(params.additional-helm-flags)
       - name: additional-helm-tools-flags
