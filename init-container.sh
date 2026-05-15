@@ -34,6 +34,12 @@ curl -LSs -o /usr/local/bin/cli53 "https://github.com/barnybug/cli53/releases/do
     | jq -r .tag_name)/cli53-linux-${ARCH}" \
     && chmod 0755 /usr/local/bin/cli53
 
+GO_VERSION=$(curl -Lfs 'https://go.dev/VERSION?m=text' | head -n1) \
+    && curl -Lfs "https://go.dev/dl/${GO_VERSION}.linux-${ARCH}.tar.gz" | \
+    tar -xz -f - -C /usr/local \
+    && ln -s /usr/local/go/bin/go /usr/local/bin/go \
+    && ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+
 NODE_VERSION=$(curl -Lfs https://nodejs.org/dist/index.json | jq -r '[.[] | select(.lts != false)][0].version') \
     && curl -Lfs "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" | \
     tar -xJ -f - --strip-components=1 -C /usr/local
