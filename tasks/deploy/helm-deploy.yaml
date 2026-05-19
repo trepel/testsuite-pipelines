@@ -159,7 +159,7 @@ spec:
       helm install -n=default \
       --repo https://kuadrant.io/helm-charts-olm \
       --values=/mount/values-additional-manifests/additionalManifests.yaml \
-      --values=//mount/values-extensions-manifests/extensionsManifests.yaml \
+      --values=/mount/values-extensions-manifests/extensionsManifests.yaml \
       --set=kuadrant.indexImage="$(params.index-image)" \
       --set=kuadrant.channel="$(params.channel)" \
       --set=kuadrant.operatorName="$(params.operator-name)" \
