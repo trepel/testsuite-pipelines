@@ -43,11 +43,11 @@ spec:
       description: GatewayAPI CRD version. [v1.2.1, v1.3.0, v1.4.0] available; leave empty if installing on Openshift 4.19+.
       name: gateway-crd
       type: string
-    - default: ""
+    - default: "quay.io/kuadrant/internal-extensions:latest"
       description: Extensions image to overwrite default one.
       name: extensions-image
       type: string
-    - default: "quay.io/kuadrant/internal-extensions:latest"
+    - default: ""
       description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
       name: additional-helm-flags
       type: string
