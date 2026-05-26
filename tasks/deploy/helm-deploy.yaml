@@ -209,5 +209,9 @@ spec:
     - secret:
         secretName: values-additional-manifests
       name: values-additional-manifests
+    - configMap:
+        name: values-extensions-manifests
+      name: values-extensions-manifests
+      
   workspaces:
   - name: shared-workspace
