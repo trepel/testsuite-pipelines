@@ -28,6 +28,9 @@ spec:
     - description: Additional flags for tools helm, example '--set=tools.keycloak.keycloakProvider=deployment --set=tools.valkey.enable=false'"
       name: additional-helm-tools-flags
       type: string
+    - description: Extensions image to overwrite default one.
+      name: extensions-image
+      type: string
   steps:
   # Uninstall steps first(cleanup before install)
   - name: remove-leftovers-kuadrant-ns
@@ -156,9 +159,11 @@ spec:
       helm install -n=default \
       --repo https://kuadrant.io/helm-charts-olm \
       --values=/mount/values-additional-manifests/additionalManifests.yaml \
+      --values=/mount/values-extensions-manifests/extensionsManifests.yaml \
       --set=kuadrant.indexImage="$(params.index-image)" \
       --set=kuadrant.channel="$(params.channel)" \
       --set=kuadrant.operatorName="$(params.operator-name)" \
+      --set=kuadrant.extensionsImage="$(params.extensions-image)" \
       --set=istio.istioProvider="$(params.istio-provider)" \
       --set=gatewayAPI.version="$(params.gateway-crd)" \
       --set=tools.enabled=true \
@@ -169,6 +174,8 @@ spec:
     volumeMounts:
       - mountPath: /mount/values-additional-manifests
         name: values-additional-manifests
+      - mountPath: /mount/values-extensions-manifests
+        name: values-extensions-manifests
     env:
       - name: KUBECONFIG
         value: $(params.kubeconfig-path)
@@ -202,5 +209,9 @@ spec:
     - secret:
         secretName: values-additional-manifests
       name: values-additional-manifests
+    - configMap:
+        name: values-extensions-manifests
+      name: values-extensions-manifests
+      
   workspaces:
   - name: shared-workspace
