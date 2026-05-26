@@ -26,7 +26,7 @@ spec:
   - description: Extensions image to overwrite default one.
     name: extensions-image
     type: string
-    default: ""
+    default: "quay.io/kuadrant/internal-extensions:latest"
   - description: Additional flags for helm install command, example '--set=kuadrant.installPlanApproval=Manual --set=kuadrant.startingCSV=kuadrant-operator.v1.2.0'
     name: additional-helm-flags
     type: string
