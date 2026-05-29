@@ -28,11 +28,15 @@ spec:
   tasks:
     - name: clone-rapidast-repo
       params:
-        - name: rapidast-version
+        - name: repo-url
+          value: https://github.com/RedHatProductSecurity/rapidast.git
+        - name: revision
           value: $(params.rapidast-version)
+        - name: dest-dir
+          value: rapidast
       taskRef:
         kind: Task
-        name: clone-rapidast-repo
+        name: clone-repo
       workspaces:
         - name: shared-workspace
     - name: kubectl-login

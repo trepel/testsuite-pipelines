@@ -1,0 +1,257 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: run-auth-e2e-tests
+spec:
+  params:
+    - description: Path to workspace kubeconfig
+      name: kubeconfig-path
+      type: string
+    - description: Namespace MCP Gateway was deployed to
+      name: mcp-gateway-namespace
+      type: string
+    - description: Gateway API provider (ocp/ossm3)
+      name: istio-provider
+      type: string
+    - description: Run the actual auth e2e tests (true/false)
+      name: run-tests
+      type: string
+  steps:
+    - name: run-auth-e2e-tests
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        # Populate env vars required for auth e2e tests
+        export MCP_GATEWAY_HOST="mcp.apps.$(oc get dns cluster -o jsonpath='{.spec.baseDomain}')"
+        export GATEWAY_URL="https://${MCP_GATEWAY_HOST}/mcp"
+        export E2E_DOMAIN="apps.$(oc get dns cluster -o jsonpath='{.spec.baseDomain}')"
+        export E2E_SCHEME=https
+        export E2E_PLATFORM=openshift
+        export E2E_TIMEOUT=90m
+
+        export AUTH_GATEWAY_URL=$GATEWAY_URL
+        export KEYCLOAK_URL="https://keycloak.$E2E_DOMAIN"
+        export KEYCLOAK_TOKEN_URL=$KEYCLOAK_URL/realms/mcp/protocol/openid-connect/token
+
+        export MCP_GATEWAY_NAMESPACE="$(params.mcp-gateway-namespace)"
+
+        if [ "$(params.istio-provider)" = "ocp" ]; then
+          export GATEWAY_CLASS_NAME=openshift-default
+        else
+          export GATEWAY_CLASS_NAME=istio
+        fi
+
+        # delete MCPGatewayExtension if exists, E2E tests create one on their own
+        if [ "$(params.run-tests)" = "true" ]; then
+          oc delete mcpgatewayextension --all -n "$MCP_GATEWAY_NAMESPACE" --wait=true --ignore-not-found=true
+        fi
+
+        # create mcp-test namespace if it does not exist
+        oc create namespace mcp-test --dry-run=client -o yaml | oc apply -f -
+
+        cd "$(workspaces.shared-workspace.path)/mcp-gateway"
+
+        # deploy and register test MCP servers
+        oc apply -k config/test-servers/
+        # patch imagePullPolicy to pull the image from remote registry
+        for dep in $(oc get deployments -n mcp-test -o jsonpath='{.items[*].metadata.name}'); do
+          oc patch deployment "$dep" -n mcp-test --type='json' -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Always"}]'
+        done
+        # wait for test MCP servers to get ready
+        oc wait --for=condition=available --timeout=180s deployment/mcp-test-server1 -n mcp-test
+        oc wait --for=condition=available --timeout=180s deployment/mcp-test-server2 -n mcp-test
+
+        oc apply -f config/mcp-gateway/overlays/mcp-system/trusted-header-public-key.yaml -n $MCP_GATEWAY_NAMESPACE
+
+        # Update Keycloak configuration, set HOSTNAME and PROXY_HEADERS env vars
+        kubectl get keycloak keycloak -n tools -o json | jq --arg hostname "$KEYCLOAK_URL" '.spec.additionalOptions |= (
+            (. // []) | map(select(.name != "HOSTNAME" and .name != "PROXY_HEADERS")) +
+            [{"name": "HOSTNAME", "value": $hostname}, {"name": "PROXY_HEADERS", "value": "xforwarded"}]
+        )' | kubectl apply -f -
+
+        # Add keycloak listener to mcp-gateway if it doesn't exist
+        if ! kubectl get gateway mcp-gateway -n gateway-system -o json | jq -e '.spec.listeners[] | select(.name == "keycloak")' > /dev/null 2>&1; then
+          kubectl patch gateway mcp-gateway -n gateway-system --type json -p '[
+            {
+              "op": "add",
+              "path": "/spec/listeners/-",
+              "value": {
+                "name": "keycloak",
+                "hostname": "keycloak.'"$E2E_DOMAIN"'",
+                "port": 8081,
+                "protocol": "HTTP",
+                "allowedRoutes": {
+                  "namespaces": {
+                    "from": "All"
+                  }
+                }
+              }
+            }
+          ]'
+        fi
+
+        # Create OpenShift Route to access Keycloak (via Gateway, HTTPRoute)
+        kubectl apply -f - <<EOF
+          apiVersion: route.openshift.io/v1
+          kind: Route
+          metadata:
+            name: keycloak
+            namespace: gateway-system
+          spec:
+            host: keycloak.$E2E_DOMAIN
+            to:
+              kind: Service
+              name: mcp-gateway-$GATEWAY_CLASS_NAME
+              weight: 100
+            port:
+              targetPort: keycloak
+            tls:
+              termination: edge
+              insecureEdgeTerminationPolicy: Redirect
+        EOF
+
+        # Create HTTPRoute for Keycloak
+        kubectl apply -f - <<EOF
+        apiVersion: gateway.networking.k8s.io/v1
+        kind: HTTPRoute
+        metadata:
+          name: keycloak-route
+          namespace: tools
+        spec:
+          parentRefs:
+            - name: mcp-gateway
+              namespace: gateway-system
+              sectionName: keycloak
+          hostnames:
+            - 'keycloak.$E2E_DOMAIN'
+          rules:
+            # OAuth discovery endpoint rewrite rule for mcp realm
+            - matches:
+                - path:
+                    type: Exact
+                    value: /.well-known/oauth-authorization-server/realms/mcp
+              filters:
+                - type: URLRewrite
+                  urlRewrite:
+                    path:
+                      type: ReplaceFullPath
+                      replaceFullPath: /realms/mcp/.well-known/oauth-authorization-server
+              backendRefs:
+                - name: keycloak
+                  port: 8080
+            # Default rule for all other paths
+            - matches:
+                - path:
+                    type: PathPrefix
+                    value: /
+              filters:
+                - type: ResponseHeaderModifier
+                  responseHeaderModifier:
+                    remove:
+                      - Access-Control-Allow-Origin
+                      - Access-Control-Allow-Credentials
+                      - Access-Control-Allow-Headers
+                      - Access-Control-Allow-Methods
+                    set:
+                      - name: Access-Control-Allow-Origin
+                        value: 'http://localhost:6274'
+                      - name: Access-Control-Allow-Credentials
+                        value: 'true'
+                      - name: Access-Control-Allow-Headers
+                        value: 'Content-Type, Authorization'
+                      - name: Access-Control-Allow-Methods
+                        value: 'POST, OPTIONS'
+              backendRefs:
+                - name: keycloak
+                  port: 8080
+        EOF
+
+        # Envoy Filter to workaround CORS issues
+        kubectl apply -f - <<EOF
+        apiVersion: networking.istio.io/v1alpha3
+        kind: EnvoyFilter
+        metadata:
+          name: keycloak-preflight-204
+          namespace: gateway-system
+        spec:
+          workloadSelector:
+            labels:
+              istio: ingressgateway
+          configPatches:
+          - applyTo: HTTP_ROUTE
+            match:
+              context: GATEWAY
+              routeConfiguration:
+                vhost:
+                  name: "keycloak.$E2E_DOMAIN:8081"
+            patch:
+              operation: INSERT_FIRST
+              value:
+                name: kc-preflight-clients-registrations
+                match:
+                  path: "/realms/mcp/clients-registrations/openid-connect"
+                  headers:
+                  - name: ":method"
+                    exact_match: "OPTIONS"
+                direct_response:
+                  status: 204
+                response_headers_to_add:
+                - header: { key: access-control-allow-origin,      value: "%REQ(ORIGIN)%" }
+                - header: { key: access-control-allow-methods,     value: "POST, OPTIONS" }
+                - header: { key: access-control-allow-headers,     value: "Content-Type, Authorization" }
+                - header: { key: access-control-allow-credentials, value: "true" }
+                - header: { key: vary,                              value: "Origin" }
+                - header: { key: content-length,                    value: "0" }
+        EOF
+
+        # Configure trusted headers private key
+        kubectl apply -f ./config/samples/oauth-token-exchange/trusted-headers-private-key.yaml -n $MCP_GATEWAY_NAMESPACE
+
+        # Create required AuthPolicies
+        sed -e "s|https://keycloak.127-0-0-1.sslip.io:8002|${KEYCLOAK_URL}|g" -e "s|http://mcp.127-0-0-1.sslip.io:8001|https://mcp.${E2E_DOMAIN}|g" config/samples/oauth-token-exchange/tools-list-auth.yaml | kubectl apply -f -
+
+
+        sed -e "s|https://keycloak.127-0-0-1.sslip.io:8002|${KEYCLOAK_URL}|g" -e "s|http://mcp.127-0-0-1.sslip.io:8001|https://mcp.${E2E_DOMAIN}|g" config/e2e/auth/mcps-auth-policy.yaml | kubectl apply -f -
+
+        # Patch Authorino to trust default OpenShift ingress certificate
+        # Already done as part of Kuadrant installation
+        # see https://github.com/Kuadrant/helm-charts-olm/blob/main/charts/kuadrant-instances/templates/kuadrant/03-ca-trust-hook.yaml
+
+        # Path OIDC-enabled MCP server to trust default OpenShift ingress certificate
+        kubectl set env deployment/mcp-oidc-server -n mcp-test ISSUER_URL=$KEYCLOAK_URL/realms/mcp
+        kubectl patch deployment mcp-oidc-server -n mcp-test --type='json' -p='[
+        {
+          "op": "add",
+          "path": "/spec/template/spec/volumes",
+          "value": [{
+            "name": "ocp-router-ca",
+            "configMap": {
+              "name": "kube-root-ca.crt"
+            }
+          }]
+        },
+        {
+          "op": "add",
+          "path": "/spec/template/spec/containers/0/volumeMounts",
+          "value": [{
+            "name": "ocp-router-ca",
+            "mountPath": "/etc/ssl/certs",
+            "readOnly": true
+          }]
+        }
+        ]'
+
+        if [ "$(params.run-tests)" = "true" ]; then
+          make test-e2e-auth-ci
+        else
+          echo "Skipping auth e2e test execution (run-tests=false)"
+        fi
+
+  workspaces:
+    - name: shared-workspace

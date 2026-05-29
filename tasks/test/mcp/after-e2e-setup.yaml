@@ -1,0 +1,116 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: after-e2e-setup
+spec:
+  params:
+    - description: Path to workspace kubeconfig
+      name: kubeconfig-path
+      type: string
+    - description: Namespace MCP Gateway was deployed to
+      name: mcp-gateway-namespace
+      type: string
+    - description: Gateway API provider (ocp/ossm3)
+      name: istio-provider
+      type: string
+  steps:
+    - name: setup-mcp-gateway-extension
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        echo "Creating MCPGatewayExtension CR..."
+        # Get cluster base domain
+        BASE_DOMAIN=$(oc get dns cluster -o jsonpath='{.spec.baseDomain}')
+        # Construct hosts
+        PUBLIC_HOST="mcp.apps.${BASE_DOMAIN}"
+        # Determine gateway class name based on provider
+        if [ "$(params.istio-provider)" = "ocp" ]; then
+          GATEWAY_CLASS_NAME=openshift-default
+        else
+          GATEWAY_CLASS_NAME=istio
+        fi
+        PRIVATE_HOST="mcp-gateway-${GATEWAY_CLASS_NAME}.gateway-system.svc.cluster.local:8080"
+
+        # Create MCPGatewayExtension
+        kubectl apply -n $(params.mcp-gateway-namespace) -f - <<EOF
+        apiVersion: mcp.kuadrant.io/v1alpha1
+        kind: MCPGatewayExtension
+        metadata:
+          name: mcp-gateway-extension
+        spec:
+          privateHost: ${PRIVATE_HOST}
+          publicHost: ${PUBLIC_HOST}
+          targetRef:
+            group: gateway.networking.k8s.io
+            kind: Gateway
+            name: mcp-gateway
+            namespace: gateway-system
+            sectionName: mcp
+          urlElicitation: Enabled
+        EOF
+
+        echo "MCPGatewayExtension created successfully"
+
+    - name: register-test-servers
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        TIMEOUT=240s
+
+        cd "$(workspaces.shared-workspace.path)/mcp-gateway"
+
+        # create mcp-test namespace if it does not exist
+        oc create namespace mcp-test --dry-run=client -o yaml | oc apply -f -
+
+        # deploy test MCP servers
+        oc apply -k config/test-servers/
+        # patch imagePullPolicy to pull the image from remote registry
+        for dep in $(oc get deployments -n mcp-test -o jsonpath='{.items[*].metadata.name}'); do
+          oc patch deployment "$dep" -n mcp-test --type='json' -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Always"}]'
+        done
+        # wait for test MCP servers to get ready
+        oc wait --for=condition=available --timeout=180s deployment/mcp-test-server1 -n mcp-test
+        oc wait --for=condition=available --timeout=180s deployment/mcp-test-server2 -n mcp-test
+
+        echo "Registering MCP test servers..."
+
+        # Apply MCPServerRegistration CRs
+        kubectl apply -f config/samples/mcpserverregistration-test-servers-base.yaml
+        kubectl apply -f config/samples/mcpserverregistration-test-servers-extended.yaml
+
+        echo "Waiting for MCPServerRegistration CRs to be ready..."
+
+        # Wait for all MCPServerRegistration resources in mcp-test namespace
+        MCPSR_LIST=$(kubectl get mcpserverregistration -n mcp-test -o jsonpath='{.items[*].metadata.name}')
+
+        if [ -n "$MCPSR_LIST" ]; then
+          for mcpsr in $MCPSR_LIST; do
+            echo "Waiting for MCPServerRegistration/$mcpsr to be ready..."
+            kubectl wait --for=condition=Ready mcpserverregistration/$mcpsr -n mcp-test --timeout=$TIMEOUT || {
+              echo "Warning: MCPServerRegistration/$mcpsr did not become ready within $TIMEOUT"
+            }
+          done
+          echo "All MCPServerRegistration CRs processed"
+        else
+          echo "Warning: No MCPServerRegistration resources found in mcp-test namespace"
+        fi
+
+        # Delete AuthPolicies - these were created as part of Auth E2E setup
+        oc delete authpolicy --all -n gateway-system --wait=true --ignore-not-found=true
+
+        echo "After-e2e setup completed successfully"
+
+  workspaces:
+    - name: shared-workspace

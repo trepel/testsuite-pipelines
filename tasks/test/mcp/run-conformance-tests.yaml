@@ -1,0 +1,69 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: run-conformance-tests
+spec:
+  params:
+    - description: Path to workspace kubeconfig
+      name: kubeconfig-path
+      type: string
+    - description: MCP conformance test suite version
+      name: conformance-version
+      type: string
+      default: "0.1.15"
+  steps:
+    - name: run-conformance-tests
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+      - name: CONFORMANCE_VERSION
+        value: $(params.conformance-version)
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        # get URL to MCP Gateway
+        MCP_GATEWAY_HOST="mcp.apps.$(oc get dns cluster -o jsonpath='{.spec.baseDomain}')"
+        MCP_GATEWAY_URL="https://${MCP_GATEWAY_HOST}/mcp"
+
+        # create mcp-test namespace if it does not exist
+        oc create namespace mcp-test --dry-run=client -o yaml | oc apply -f -
+
+        # deploy and register conformance MCP server
+        cd "$(workspaces.shared-workspace.path)/mcp-gateway"
+        oc apply -k config/test-servers/conformance-server/
+
+        # patch imagePullPolicy to pull the image from remote registry
+        oc patch deployment conformance-server -n mcp-test --type='json' -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Always"}]'
+
+        oc wait --for=condition=Available deployment -n mcp-test -l app=conformance-server --timeout=60s
+        oc apply -f config/samples/mcpserverregistration-conformance-server.yaml
+        oc wait --for=condition=Ready mcpsr/conformance-server -n mcp-test --timeout=120s
+
+        sleep 10
+
+        # disable TLS verification for Node.js
+        export NODE_TLS_REJECT_UNAUTHORIZED=0
+
+        SCENARIOS=(
+          server-initialize
+          tools-list
+          ping
+          tools-call-simple-text
+          tools-call-image
+          tools-call-audio
+          tools-call-embedded-resource
+          tools-call-mixed-content
+          tools-call-error
+          tools-call-with-progress
+        )
+        for scenario in "${SCENARIOS[@]}"; do
+          echo "=== Running scenario: $scenario ==="
+          npx @modelcontextprotocol/conformance@${CONFORMANCE_VERSION} server \
+            --url "${MCP_GATEWAY_URL}" \
+            --scenario "$scenario"
+        done
+  workspaces:
+    - name: shared-workspace

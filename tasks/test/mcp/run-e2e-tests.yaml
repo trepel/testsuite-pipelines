@@ -1,0 +1,195 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: run-e2e-tests
+spec:
+  params:
+    - description: Path to workspace kubeconfig
+      name: kubeconfig-path
+      type: string
+    - description: Namespace MCP Gateway was deployed to
+      name: mcp-gateway-namespace
+      type: string
+    - description: Gateway API provider (ocp/ossm3)
+      name: istio-provider
+      type: string
+    - description: Run the actual e2e tests (true/false)
+      name: run-tests
+      type: string
+  steps:
+    - name: run-e2e-tests
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        # Populate env vars required for e2e tests
+        export MCP_GATEWAY_HOST="mcp.apps.$(oc get dns cluster -o jsonpath='{.spec.baseDomain}')"
+        export GATEWAY_URL="https://${MCP_GATEWAY_HOST}/mcp"
+        export E2E_DOMAIN="apps.$(oc get dns cluster -o jsonpath='{.spec.baseDomain}')"
+        export E2E_SCHEME=https
+        export E2E_PLATFORM=openshift
+        export E2E_TIMEOUT=120m
+
+        export MCP_GATEWAY_NAMESPACE="$(params.mcp-gateway-namespace)"
+
+        if [ "$(params.istio-provider)" = "ocp" ]; then
+          export GATEWAY_CLASS_NAME=openshift-default
+        else
+          export GATEWAY_CLASS_NAME=istio
+        fi
+
+        # delete MCPGatewayExtension if exists, E2E tests create one on their own
+        if [ "$(params.run-tests)" = "true" ]; then
+          oc delete mcpgatewayextension --all -n "$MCP_GATEWAY_NAMESPACE" --wait=true --ignore-not-found=true
+        fi
+
+        # create mcp-test namespace if it does not exist
+        oc create namespace mcp-test --dry-run=client -o yaml | oc apply -f -
+
+        cd "$(workspaces.shared-workspace.path)/mcp-gateway"
+
+        # deploy and register test MCP servers
+        oc apply -k config/test-servers/
+        # patch imagePullPolicy to pull the image from remote registry
+        for dep in $(oc get deployments -n mcp-test -o jsonpath='{.items[*].metadata.name}'); do
+          oc patch deployment "$dep" -n mcp-test --type='json' -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Always"}]'
+        done
+        # wait for test MCP servers to get ready
+        oc wait --for=condition=available --timeout=180s deployment/mcp-test-server1 -n mcp-test
+        oc wait --for=condition=available --timeout=180s deployment/mcp-test-server2 -n mcp-test
+
+        # deploy redis
+        oc apply -f config/mcp-gateway/overlays/mcp-system/redis-deployment.yaml -n "$MCP_GATEWAY_NAMESPACE"
+        oc apply -f config/mcp-gateway/overlays/mcp-system/redis-service.yaml -n $MCP_GATEWAY_NAMESPACE
+        oc patch deployment redis -n "$MCP_GATEWAY_NAMESPACE"  --type=json -p '[
+          {
+            "op": "add",
+            "path": "/spec/template/spec/containers/0/command",
+            "value": ["redis-server", "--save", "", "--appendonly", "no"]
+          }
+        ]'
+        oc rollout status deployment/redis -n "$MCP_GATEWAY_NAMESPACE" --timeout=60s
+
+        oc apply -f config/mcp-gateway/overlays/mcp-system/trusted-header-public-key.yaml -n $MCP_GATEWAY_NAMESPACE
+
+        make deploy-e2e-gateways-openshift
+
+        # create OpenShift Routes for e2e Gateways
+        kubectl apply -f - <<EOF
+        apiVersion: route.openshift.io/v1
+        kind: Route
+        metadata:
+          name: e2e-1
+          namespace: gateway-system
+        spec:
+          host: e2e-1.${E2E_DOMAIN}
+          tls:
+            insecureEdgeTerminationPolicy: Redirect
+            termination: edge
+          port:
+            targetPort: mcp
+          to:
+            kind: Service
+            name: e2e-1-${GATEWAY_CLASS_NAME}
+            weight: 100
+          wildcardPolicy: None
+        EOF
+
+        kubectl apply -f - <<EOF
+        apiVersion: route.openshift.io/v1
+        kind: Route
+        metadata:
+          name: e2e-2
+          namespace: gateway-system
+        spec:
+          host: e2e-2.${E2E_DOMAIN}
+          tls:
+            insecureEdgeTerminationPolicy: Redirect
+            termination: edge
+          port:
+            targetPort: mcp
+          to:
+            kind: Service
+            name: e2e-2-${GATEWAY_CLASS_NAME}
+            weight: 100
+          wildcardPolicy: None
+        EOF
+
+        kubectl apply -f - <<EOF
+        apiVersion: route.openshift.io/v1
+        kind: Route
+        metadata:
+          name: shared-gateway-team-a
+          namespace: gateway-system
+        spec:
+          host: team-a.${E2E_DOMAIN}
+          tls:
+            insecureEdgeTerminationPolicy: Redirect
+            termination: edge
+          port:
+            targetPort: team-a-mcp
+          to:
+            kind: Service
+            name: shared-gateway-${GATEWAY_CLASS_NAME}
+            weight: 100
+          wildcardPolicy: None
+        EOF
+
+        kubectl apply -f - <<EOF
+        apiVersion: route.openshift.io/v1
+        kind: Route
+        metadata:
+          name: shared-gateway-team-b
+          namespace: gateway-system
+        spec:
+          host: team-b.${E2E_DOMAIN}
+          tls:
+            insecureEdgeTerminationPolicy: Redirect
+            termination: edge
+          port:
+            targetPort: team-b-mcp
+          to:
+            kind: Service
+            name: shared-gateway-${GATEWAY_CLASS_NAME}
+            weight: 100
+          wildcardPolicy: None
+        EOF
+
+        kubectl apply -f config/test-servers/tls-server-cert-manager.yaml
+        kubectl wait --for=condition=Ready certificate/private-ca -n cert-manager --timeout=60s
+        kubectl wait --for=condition=Ready certificate/tls-test-server-cert -n mcp-test --timeout=60s
+        kubectl apply -f config/test-servers/tls-server-deployment.yaml
+        kubectl patch deployment mcp-tls-server -n mcp-test --type=json -p='[
+            {"op": "replace", "path": "/spec/template/spec/containers/0/imagePullPolicy", "value": "Always"},
+            {"op": "remove", "path": "/spec/template/spec/securityContext/runAsUser"},
+            {"op": "remove", "path": "/spec/template/spec/securityContext/runAsGroup"}
+        ]'
+        kubectl wait --for=condition=available --timeout=120s deployment/mcp-tls-server -n mcp-test
+
+        if [ "$(params.run-tests)" = "true" ]; then
+          make test-e2e-run
+        else
+          echo "Skipping e2e test execution (run-tests=false), but setup completed successfully"
+        fi
+
+        kubectl patch gateway mcp-gateway -n gateway-system --type=json -p='[
+            {"op": "add", "path": "/spec/listeners/-", "value": {
+              "name": "mcps-https",
+              "port": 8080,
+              "protocol": "HTTP",
+              "hostname": "*.mcp-tls.local",
+              "allowedRoutes": {
+                "namespaces": {
+                  "from": "All"
+                }
+              }
+            }}
+        ]'
+
+  workspaces:
+    - name: shared-workspace

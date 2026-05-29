@@ -1,0 +1,73 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: install-mcp-gateway
+spec:
+  params:
+    - description: Path to workspace kubeconfig
+      name: kubeconfig-path
+      type: string
+    - description: MCP Gateway namespace
+      name: mcp-gateway-namespace
+      type: string
+    - description: MCP Controller catalog image
+      name: catalog-image
+      type: string
+    - description: Istio provider (ossm3, ocp)
+      name: istio-provider
+      type: string
+    - description: MCP Gateway operator channel
+      name: channel
+      type: string
+    - description: MCP Gateway Helm chart version ('local' to use cloned repo, or specific version tag like '0.1.0')
+      name: mcp-gateway-chart-version
+      type: string
+    - description: If set to 'true' the 'catalog-image' param is ignored and official Catalog is used instead
+      name: install-productized-version
+      type: string
+    - description: If set to 'true' Service Mesh will be installed
+      name: install-service-mesh
+      type: string
+  steps:
+    - name: install-mcp-gateway
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        export MCP_GATEWAY_NAMESPACE="$(params.mcp-gateway-namespace)"
+
+        # RHCL is installed automatically if installing MCP Gateway via OLM
+        export INSTALL_RHCL=false
+
+        if [ "$(params.install-service-mesh)" = "true" ]; then
+          export INSTALL_SERVICE_MESH=true
+        else
+          export INSTALL_SERVICE_MESH=false
+        fi
+
+        if [ "$(params.install-productized-version)" = "true" ]; then
+          export INSTALL_PRODUCTIZED_VERSION=true
+        else
+          export INSTALL_PRODUCTIZED_VERSION=false
+        fi
+
+        export MCP_GATEWAY_VERSION="$(params.mcp-gateway-chart-version)"
+
+        if [ "$(params.istio-provider)" = "ocp" ]; then
+          export USE_OCP_INGRESS=true
+        else
+          export USE_OCP_INGRESS=false
+        fi
+
+        export CATALOG_IMG=$(params.catalog-image)
+        export CHANNEL=$(params.channel)
+
+        cd "$(workspaces.shared-workspace.path)/mcp-gateway"
+
+        bash config/openshift/deploy_openshift.sh
+  workspaces:
+    - name: shared-workspace

@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - after-e2e-setup.yaml
+  - run-conformance-tests.yaml
+  - run-e2e-tests.yaml
+  - run-auth-e2e-tests.yaml
