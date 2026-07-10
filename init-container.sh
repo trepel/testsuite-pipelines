@@ -53,4 +53,4 @@ rpm --import https://packages.microsoft.com/keys/microsoft.asc \
     && rpm -Uvh https://packages.microsoft.com/config/rhel/9.0/packages-microsoft-prod.rpm \
     && microdnf -y install azure-cli
 
-python3.11 -m pip install --no-cache-dir osia
+python3.11 -m pip install --no-cache-dir git+https://github.com/Kuadrant/osia.git
