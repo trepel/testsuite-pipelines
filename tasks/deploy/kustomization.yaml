@@ -5,3 +5,5 @@ resources:
   - check-image-existence.yaml
   - nightly-image-date.yaml
   - helm-deploy.yaml
+  - import-keycloak-realm.yaml
+  - install-mcp-gateway.yaml

@@ -1,0 +1,305 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: run-e2e-tests
+spec:
+  params:
+    - description: Path to workspace kubeconfig
+      name: kubeconfig-path
+      type: string
+    - description: Namespace MCP Gateway was deployed to
+      name: mcp-gateway-namespace
+      type: string
+    - description: Gateway API provider (ocp/ossm3)
+      name: istio-provider
+      type: string
+    - description: Run the actual e2e tests (true/false)
+      name: run-tests
+      type: string
+  steps:
+    - name: run-e2e-tests
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+      - name: GITHUB_MCP_PAT
+        valueFrom:
+          secretKeyRef:
+            name: trepel-gh-pat
+            key: token
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        # Populate env vars required for e2e tests
+        export E2E_DOMAIN="apps.$(oc get dns cluster -o jsonpath='{.spec.baseDomain}')"
+        export E2E_SCHEME=https
+        export E2E_HTTPS_REAL_CERTS=true
+        export E2E_PLATFORM=openshift
+        export E2E_TIMEOUT=120m
+        export E2E_PROCS=4
+
+        export MCP_GATEWAY_HOST="mcp.apps.$(oc get dns cluster -o jsonpath='{.spec.baseDomain}')"
+        export GATEWAY_URL="${E2E_SCHEME}://${MCP_GATEWAY_HOST}/mcp"
+        export GATEWAY_CA_BUNDLE_SECRET=trusted-ca-bundle
+        export GATEWAY_CA_BUNDLE_CONFIGMAP=trusted-ca-bundle
+        export GATEWAY_TLS_LISTENER_HOSTNAME="*.${E2E_DOMAIN}"
+
+        export MCP_GATEWAY_NAMESPACE="$(params.mcp-gateway-namespace)"
+
+        if [ "$(params.istio-provider)" = "ocp" ]; then
+          export GATEWAY_CLASS_NAME=openshift-default
+        else
+          export GATEWAY_CLASS_NAME=istio
+        fi
+
+        # Get the default ingress certificate name
+        CERT_NAME=$(kubectl get ingresscontroller default -n openshift-ingress-operator -o jsonpath='{.spec.defaultCertificate.name}')
+        if [ -z "$CERT_NAME" ]; then
+          echo "Error: Could not find default ingress certificate name"
+          exit 1
+        fi
+        export GATEWAY_TLS_SECRET=${CERT_NAME}
+
+        # delete MCPGatewayExtension if exists, E2E tests create one on their own
+        if [ "$(params.run-tests)" = "true" ]; then
+          oc delete mcpgatewayextension --all -n "$MCP_GATEWAY_NAMESPACE" --wait=true --ignore-not-found=true
+        fi
+
+        # create mcp-test namespace if it does not exist
+        oc create namespace mcp-test --dry-run=client -o yaml | oc apply -f -
+
+        cd "$(workspaces.shared-workspace.path)/mcp-gateway"
+
+        # deploy and register test MCP servers
+        oc apply -k config/test-servers/
+        # patch imagePullPolicy to pull the image from remote registry
+        for dep in $(oc get deployments -n mcp-test -o jsonpath='{.items[*].metadata.name}'); do
+          oc patch deployment "$dep" -n mcp-test --type='json' -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Always"}]'
+        done
+        # wait for test MCP servers to get ready
+        oc wait --for=condition=available --timeout=180s deployment/mcp-test-server1 -n mcp-test
+        oc wait --for=condition=available --timeout=180s deployment/mcp-test-server2 -n mcp-test
+
+        # deploy redis
+        oc apply -f config/mcp-gateway/overlays/mcp-system/redis-deployment.yaml -n "$MCP_GATEWAY_NAMESPACE"
+        oc apply -f config/mcp-gateway/overlays/mcp-system/redis-service.yaml -n $MCP_GATEWAY_NAMESPACE
+        oc patch deployment redis -n "$MCP_GATEWAY_NAMESPACE"  --type=json -p '[
+          {
+            "op": "add",
+            "path": "/spec/template/spec/containers/0/command",
+            "value": ["redis-server", "--save", "", "--appendonly", "no"]
+          }
+        ]'
+        oc rollout status deployment/redis -n "$MCP_GATEWAY_NAMESPACE" --timeout=60s
+
+        oc apply -f config/mcp-gateway/overlays/mcp-system/trusted-header-public-key.yaml -n $MCP_GATEWAY_NAMESPACE
+
+        make deploy-e2e-gateways
+
+        # path mcp-gateway Route to work with HTTPS GW Listener
+        oc patch route mcp-gateway -n gateway-system --type=merge -p '{"spec":{"tls":{"termination":"passthrough"},"port":{"targetPort":"mcp-tls"}}}'
+
+        # create OpenShift Routes for e2e Gateways
+        oc apply -f - <<EOF
+        apiVersion: route.openshift.io/v1
+        kind: Route
+        metadata:
+          name: e2e-1
+          namespace: gateway-system
+        spec:
+          host: e2e-1.${E2E_DOMAIN}
+          tls:
+            insecureEdgeTerminationPolicy: Redirect
+            termination: edge
+          port:
+            targetPort: mcp
+          to:
+            kind: Service
+            name: e2e-1-${GATEWAY_CLASS_NAME}
+            weight: 100
+          wildcardPolicy: None
+        EOF
+
+        oc apply -f - <<EOF
+        apiVersion: route.openshift.io/v1
+        kind: Route
+        metadata:
+          name: e2e-2
+          namespace: gateway-system
+        spec:
+          host: e2e-2.${E2E_DOMAIN}
+          tls:
+            insecureEdgeTerminationPolicy: Redirect
+            termination: edge
+          port:
+            targetPort: mcp
+          to:
+            kind: Service
+            name: e2e-2-${GATEWAY_CLASS_NAME}
+            weight: 100
+          wildcardPolicy: None
+        EOF
+
+        oc apply -f - <<EOF
+        apiVersion: route.openshift.io/v1
+        kind: Route
+        metadata:
+          name: shared-gateway-team-a
+          namespace: gateway-system
+        spec:
+          host: team-a.${E2E_DOMAIN}
+          tls:
+            insecureEdgeTerminationPolicy: Redirect
+            termination: edge
+          port:
+            targetPort: team-a-mcp
+          to:
+            kind: Service
+            name: shared-gateway-${GATEWAY_CLASS_NAME}
+            weight: 100
+          wildcardPolicy: None
+        EOF
+
+        oc apply -f - <<EOF
+        apiVersion: route.openshift.io/v1
+        kind: Route
+        metadata:
+          name: shared-gateway-team-b
+          namespace: gateway-system
+        spec:
+          host: team-b.${E2E_DOMAIN}
+          tls:
+            insecureEdgeTerminationPolicy: Redirect
+            termination: edge
+          port:
+            targetPort: team-b-mcp
+          to:
+            kind: Service
+            name: shared-gateway-${GATEWAY_CLASS_NAME}
+            weight: 100
+          wildcardPolicy: None
+        EOF
+
+        oc apply -f - <<EOF
+        apiVersion: route.openshift.io/v1
+        kind: Route
+        metadata:
+          name: e2e-elicitation
+          namespace: gateway-system
+        spec:
+          host: elicitation.${E2E_DOMAIN}
+          tls:
+            insecureEdgeTerminationPolicy: Redirect
+            termination: passthrough
+          port:
+            targetPort: mcp-tls
+          to:
+            kind: Service
+            name: e2e-elicitation-${GATEWAY_CLASS_NAME}
+            weight: 100
+          wildcardPolicy: None
+        EOF
+
+        kubectl apply -f config/test-servers/tls-server-cert-manager.yaml
+        kubectl wait --for=condition=Ready certificate/private-ca -n cert-manager --timeout=60s
+        kubectl wait --for=condition=Ready certificate/tls-test-server-cert -n mcp-test --timeout=60s
+        kubectl apply -f config/test-servers/tls-server-deployment.yaml
+        kubectl patch deployment mcp-tls-server -n mcp-test --type=json -p='[
+            {"op": "replace", "path": "/spec/template/spec/containers/0/imagePullPolicy", "value": "Always"},
+            {"op": "remove", "path": "/spec/template/spec/securityContext/runAsUser"},
+            {"op": "remove", "path": "/spec/template/spec/securityContext/runAsGroup"}
+        ]'
+        kubectl wait --for=condition=available --timeout=120s deployment/mcp-tls-server -n mcp-test
+
+        # Add mcps-https listener if it doesn't already exist
+        if ! kubectl get gateway mcp-gateway -n gateway-system -o jsonpath='{.spec.listeners[*].name}' | grep -q "mcps-https"; then
+          kubectl patch gateway mcp-gateway -n gateway-system --type=json -p='[
+              {"op": "add", "path": "/spec/listeners/-", "value": {
+                "name": "mcps-https",
+                "port": 8080,
+                "protocol": "HTTP",
+                "hostname": "*.mcp-tls.local",
+                "allowedRoutes": {
+                  "namespaces": {
+                    "from": "All"
+                  }
+                }
+              }}
+          ]'
+        else
+          echo "Listener mcps-https already exists, skipping"
+        fi
+
+        # CA bundle that Router/Broken must trust to be able to communicate with Gateway via HTTPS
+        oc apply -n $MCP_GATEWAY_NAMESPACE -f - <<EOF
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: trusted-ca-bundle
+            labels:
+              config.openshift.io/inject-trusted-cabundle: "true"
+          data: {}
+        EOF
+
+        # Copy the default ingress certificate secret to gateway-system namespace
+        kubectl get secret "$GATEWAY_TLS_SECRET" -n openshift-ingress -o yaml | \
+          sed 's/namespace: openshift-ingress/namespace: gateway-system/' | \
+          sed '/resourceVersion:/d' | \
+          sed '/uid:/d' | \
+          sed '/creationTimestamp:/d' | \
+          kubectl apply -f -
+
+        # Create a secret based on trusted-ca-bundle ConfigMap
+        kubectl delete secret "$GATEWAY_CA_BUNDLE_SECRET" -n $MCP_GATEWAY_NAMESPACE --ignore-not-found
+        kubectl get cm trusted-ca-bundle -n $MCP_GATEWAY_NAMESPACE -o jsonpath='{.data.ca-bundle\.crt}' | \
+        kubectl create secret generic "$GATEWAY_CA_BUNDLE_SECRET" \
+        --from-file=ca-bundle.crt=/dev/stdin -n $MCP_GATEWAY_NAMESPACE
+
+        # patch server3 to disable DNS rebinding protection, see https://github.com/modelcontextprotocol/python-sdk/issues/1798
+        kubectl -n mcp-test set env deployment/mcp-test-server3 FASTMCP_HTTP_HOST_ORIGIN_PROTECTION=false
+
+        if ! kubectl get gateway mcp-gateway -n gateway-system -o jsonpath='{.spec.listeners[*].name}' | grep -q "tool-discovery"; then
+          kubectl patch gateway mcp-gateway -n gateway-system --type=json -p "[{
+            \"op\": \"add\",
+            \"path\": \"/spec/listeners/-\",
+            \"value\": {
+              \"name\": \"tool-discovery\",
+              \"hostname\": \"*.tool-discovery.$E2E_DOMAIN\",
+              \"port\": 8080,
+              \"protocol\": \"HTTP\",
+              \"allowedRoutes\": {\"namespaces\": {\"from\": \"All\"}}
+            }
+          }]"
+        else
+          echo "Listener tool-discovery already exists, skipping"
+        fi
+
+        # create OpenShift Route for tool-discovery Listener
+        kubectl apply -f - <<EOF
+          apiVersion: route.openshift.io/v1
+          kind: Route
+          metadata:
+            name: tool-discovery
+            namespace: gateway-system
+          spec:
+            host: mcp.tool-discovery.$E2E_DOMAIN
+            to:
+              kind: Service
+              name: mcp-gateway-openshift-default
+            port:
+              targetPort: mcps
+            tls:
+              termination: edge
+              insecureEdgeTerminationPolicy: Redirect
+        EOF
+
+        if [ "$(params.run-tests)" = "true" ]; then
+          make test-e2e-run
+        else
+          echo "Skipping e2e test execution (run-tests=false), but setup completed successfully"
+        fi
+
+  workspaces:
+    - name: shared-workspace

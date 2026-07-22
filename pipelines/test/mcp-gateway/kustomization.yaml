@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - pairs:
+      deployment: kuadrant-qe-pipeline
+      app: test-mcp-gateway
+
+components:
+  - ../../../tasks/login/
+  - ../../../tasks/deploy/
+  - ../../../tasks/misc/
+  - ../../../tasks/test/mcp/
+
+resources:
+  - pipeline.yaml
