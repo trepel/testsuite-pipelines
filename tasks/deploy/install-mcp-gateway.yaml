@@ -38,33 +38,21 @@ spec:
         #!/usr/bin/env bash
         set -euo pipefail
 
-        export MCP_GATEWAY_NAMESPACE="$(params.mcp-gateway-namespace)"
-
         # RHCL is installed automatically if installing MCP Gateway via OLM
         export INSTALL_RHCL=false
 
-        if [ "$(params.install-service-mesh)" = "true" ]; then
-          export INSTALL_SERVICE_MESH=true
-        else
-          export INSTALL_SERVICE_MESH=false
-        fi
-
-        if [ "$(params.install-productized-version)" = "true" ]; then
-          export INSTALL_PRODUCTIZED_VERSION=true
-        else
-          export INSTALL_PRODUCTIZED_VERSION=false
-        fi
-
+        export MCP_GATEWAY_NAMESPACE="$(params.mcp-gateway-namespace)"
+        export INSTALL_SERVICE_MESH="$(params.install-service-mesh)"
+        export INSTALL_PRODUCTIZED_VERSION="$(params.install-productized-version)"
         export MCP_GATEWAY_VERSION="$(params.mcp-gateway-chart-version)"
+        export CATALOG_IMG="$(params.catalog-image)"
+        export CHANNEL="$(params.channel)"
 
         if [ "$(params.istio-provider)" = "ocp" ]; then
           export USE_OCP_INGRESS=true
         else
           export USE_OCP_INGRESS=false
         fi
-
-        export CATALOG_IMG=$(params.catalog-image)
-        export CHANNEL=$(params.channel)
 
         cd "$(workspaces.shared-workspace.path)/mcp-gateway"
 

@@ -227,8 +227,6 @@ spec:
 
 
         sed -e "s|https://keycloak.127-0-0-1.sslip.io:8002|${KEYCLOAK_URL}|g" -e "s|http://mcp.127-0-0-1.sslip.io:8001|https://mcp.${E2E_DOMAIN}|g" config/e2e/auth/mcps-auth-policy.yaml | kubectl apply -f -
-        
-        #sed -e "s|https://keycloak.127-0-0-1.sslip.io:8002|${KEYCLOAK_URL}|g" -e "s|http://mcp.127-0-0-1.sslip.io:8001|https://mcp.${E2E_DOMAIN}|g" config/e2e/auth/merged-auth-policy.yaml | kubectl apply -f -
 
         # Patch Authorino to trust default OpenShift ingress certificate
         # Already done as part of Kuadrant installation

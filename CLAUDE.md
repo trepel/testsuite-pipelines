@@ -17,6 +17,7 @@ Pipelines are grouped by purpose in the `pipelines/` directory:
   - `nightly/` - Comprehensive nightly testing (runs kuadrant, authorino-standalone, multicluster, dnstls-gcp, dnstls-azure, and disruptive tests)
   - `aro/`, `osd/`, `osd-upgrade/` - Cloud-specific test pipelines
   - `release/` - Release candidate validation pipeline
+  - `mcp-gateway/` - MCP Gateway testing pipeline
 
 - **`pipelines/deploy/`** - Kuadrant deployment pipelines
   - `kuadrant-testsuite/` - Deploy Kuadrant via Helm for testing

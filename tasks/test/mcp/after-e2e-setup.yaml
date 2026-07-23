@@ -90,7 +90,7 @@ spec:
               }
             }
           }]'
-          echo "Added HTTPS listener 'mcp-tls' with hostname '*.apps.$PUBLIC_HOST'"
+          echo "Added HTTPS listener 'mcp-tls' with hostname '*.apps.$BASE_DOMAIN'"
         else
           echo "Listener 'mcp-tls' already exists, skipping"
         fi

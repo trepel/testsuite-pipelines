@@ -12,7 +12,7 @@ spec:
     name: cluster-credentials
     type: string
     default: openshift-pipelines-credentials
-  - description: Additional flags for tools helm, example '--set=tools.keycloak.keycloakProvider=deployment --set=tools.valkey.enable=false'"
+  - description: "Additional flags for tools helm, example '--set=tools.keycloak.keycloakProvider=deployment --set=tools.valkey.enable=false'"
     name: additional-helm-tools-flags
     type: string
     default: ""
@@ -24,8 +24,8 @@ spec:
   - description: Istio provider (ossm3, ocp); 'ossm3' (Service Mesh installed via OLM), 'ocp' (Istio managed by Gateway API (GatewayClass CR), available for OCP v4.19+)
     name: istio-provider
     type: string
-    default: ocp
-  - description: GatewayAPI CRD version. [v1.2.1, v1.3.0, v1.4.0] available; leave empty if installing on Openshift 4.19+.
+    default: ossm3
+  - description: GatewayAPI CRD version. [v1.3.0, v1.4.0, v1.5.0] available; leave empty if installing on Openshift 4.19+.
     name: gateway-crd
     type: string
     default: ""
@@ -108,6 +108,10 @@ spec:
     name: conformance-version
     type: string
     default: "0.1.15"
+  - description: Secret name containing GitHub PAT for MCP e2e tests
+    name: github-pat-secret
+    type: string
+    default: trepel-gh-pat
   - description: Secret name containing additional Helm values manifest (additionalManifests.yaml)
     name: additional-manifests-secret
     type: string
@@ -259,6 +263,8 @@ spec:
         value: $(params.istio-provider)
       - name: run-tests
         value: $(params.run-e2e-tests)
+      - name: github-pat-secret
+        value: $(params.github-pat-secret)
     workspaces:
     - name: shared-workspace
       workspace: shared-workspace
