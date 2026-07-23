@@ -17,6 +17,7 @@ Pipelines are grouped by purpose in the `pipelines/` directory:
   - `nightly/` - Comprehensive nightly testing (runs kuadrant, authorino-standalone, multicluster, dnstls-gcp, dnstls-azure, and disruptive tests)
   - `aro/`, `osd/`, `osd-upgrade/` - Cloud-specific test pipelines
   - `release/` - Release candidate validation pipeline
+  - `mcp-gateway/` - MCP Gateway testing pipeline
 
 - **`pipelines/deploy/`** - Kuadrant deployment pipelines
   - `kuadrant-testsuite/` - Deploy Kuadrant via Helm for testing
@@ -52,7 +53,8 @@ Reusable Tekton tasks in the `tasks/` directory:
   - `kubectl-login.yaml` - Login to clusters and store kubeconfig in workspace
 
 - **`tasks/misc/`** - Miscellaneous tasks
-  - `clone-rapidast-repo.yaml`, `rapidast-scan.yaml`, `rapidast-cleanup.yaml` - rapiDAST DAST scanning
+  - `clone-repo.yaml` - Clone GitHub repository
+  - `rapidast-scan.yaml`, `rapidast-cleanup.yaml` - rapiDAST DAST scanning
   - `compose-config-file.yaml` - Generate configuration files
   - `wait-for-job-to-complete.yaml` - Job monitoring
 

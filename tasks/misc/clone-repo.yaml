@@ -1,0 +1,37 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: clone-repo
+spec:
+  description: 'Clones a given git repository at a specified revision'
+  params:
+    - name: repo-url
+      type: string
+      description: Git repository URL to clone
+    - name: revision
+      type: string
+      description: Git revision (branch, tag) to checkout
+    - name: dest-dir
+      type: string
+      description: Destination directory name within the shared workspace
+  steps:
+  - name: clone-repo
+    args:
+      - clone
+      - --branch
+      - $(params.revision)
+      - --depth
+      - "1"
+      - --
+      - $(params.repo-url)
+      - $(workspaces.shared-workspace.path)/$(params.dest-dir)
+    command:
+      - git
+    computeResources:
+      limits:
+        cpu: 250m
+        memory: 128Mi
+    image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    imagePullPolicy: Always
+  workspaces:
+  - name: shared-workspace

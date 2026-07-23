@@ -1,0 +1,76 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: cleanup-before-tests
+spec:
+  params:
+    - description: Path to workspace kubeconfig
+      name: kubeconfig-path
+      type: string
+    - description: Namespace MCP Gateway was deployed to
+      name: mcp-gateway-namespace
+      type: string
+  steps:
+    - name: cleanup-resources
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        echo "Starting cleanup of resources before tests..."
+
+        # Delete MCPGatewayExtension in MCP Gateway namespace
+        echo "Deleting MCPGatewayExtensions in $(params.mcp-gateway-namespace) namespace..."
+        kubectl delete mcpgatewayextension --all -n $(params.mcp-gateway-namespace) --wait=true --ignore-not-found=true || true
+
+        # Delete AuthPolicies - potential leftovers from e2e auth tests
+        echo "Deleting AuthPolicies in gateway-system namespace..."
+        kubectl delete authpolicy --all -n gateway-system --wait=true --ignore-not-found=true || true
+        kubectl delete authpolicy --all -n $(params.mcp-gateway-namespace) --wait=true --ignore-not-found=true || true
+
+        # Delete mcp-route HTTPRoute in gateway-system namespace
+        echo "Deleting mcp-route HTTPRoute in gateway-system namespace..."
+        kubectl delete httproute mcp-route -n gateway-system --wait=true --ignore-not-found=true || true
+
+        # Delete HTTPRoutes in mcp-test namespace
+        echo "Deleting HTTPRoutes in mcp-test namespace..."
+        kubectl delete httproute --all -n mcp-test --wait=true --ignore-not-found=true || true
+
+        # Delete ReferenceGrants in gateway-system namespace
+        echo "Deleting ReferenceGrants in gateway-system namespace..."
+        kubectl delete referencegrant --all -n gateway-system --wait=true --ignore-not-found=true || true
+
+        # Delete MCPServerRegistrations in mcp-test namespace
+        echo "Deleting MCPServerRegistrations in mcp-test namespace..."
+        kubectl delete mcpserverregistration --all -n mcp-test --wait=true --ignore-not-found=true || true
+
+        # Remove 'mcp' and 'mcp-tls' listeners from mcp-gateway in gateway-system namespace
+        echo "Removing 'mcp' and 'mcp-tls' listeners from mcp-gateway in gateway-system namespace..."
+        if kubectl get gateway mcp-gateway -n gateway-system &>/dev/null; then
+          # Remove 'mcp' listener if it exists (need to check each time as indices shift)
+          LISTENER_INDEX=$(kubectl get gateway mcp-gateway -n gateway-system -o jsonpath='{range .spec.listeners[*]}{@.name}{"\n"}{end}' | grep -n '^mcp$' | cut -d: -f1 || echo "")
+          if [ -n "$LISTENER_INDEX" ]; then
+            echo "Removing 'mcp' listener..."
+            LISTENER_INDEX=$((LISTENER_INDEX - 1))
+            kubectl patch gateway mcp-gateway -n gateway-system --type=json -p="[{\"op\": \"remove\", \"path\": \"/spec/listeners/$LISTENER_INDEX\"}]" || echo "Failed to remove 'mcp' listener"
+          fi
+
+          # Remove 'mcp-tls' listener if it exists (re-query as indices may have shifted)
+          LISTENER_INDEX=$(kubectl get gateway mcp-gateway -n gateway-system -o jsonpath='{range .spec.listeners[*]}{@.name}{"\n"}{end}' | grep -n '^mcp-tls$' | cut -d: -f1 || echo "")
+          if [ -n "$LISTENER_INDEX" ]; then
+            echo "Removing 'mcp-tls' listener..."
+            LISTENER_INDEX=$((LISTENER_INDEX - 1))
+            kubectl patch gateway mcp-gateway -n gateway-system --type=json -p="[{\"op\": \"remove\", \"path\": \"/spec/listeners/$LISTENER_INDEX\"}]" || echo "Failed to remove 'mcp-tls' listener"
+          fi
+        else
+          echo "Gateway mcp-gateway not found in gateway-system namespace, skipping listener removal"
+        fi
+
+        echo "Cleanup completed successfully"
+
+  workspaces:
+    - name: shared-workspace

@@ -151,6 +151,12 @@ spec:
           value: $(params.additional-helm-flags)
         - name: additional-helm-tools-flags
           value: $(params.additional-helm-tools-flags)
+        - name: install-tools
+          value: "true"
+        - name: install-kuadrant
+          value: "true"
+        - name: additional-manifests-secret
+          value: values-additional-manifests
       runAfter:
         - provision-ocp-aws
       taskRef:

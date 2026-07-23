@@ -1,0 +1,535 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: import-keycloak-realm
+spec:
+  params:
+    - description: Path to workspace kubeconfig
+      name: kubeconfig-path
+      type: string
+  steps:
+    - name: import-keycloak-realm
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        export DOMAIN="https://mcp.apps.$(oc get dns cluster -o jsonpath='{.spec.baseDomain}')"
+
+        # This needs to match to what is defined in https://github.com/Kuadrant/mcp-gateway/blob/main/config/keycloak/realm-import.yaml
+        kubectl apply -n tools -f - <<EOF
+            apiVersion: k8s.keycloak.org/v2alpha1
+            kind: KeycloakRealmImport
+            metadata:
+              name: mcp-realm-import
+            spec:
+              keycloakCRName: keycloak
+              realm:
+                id: mcp
+                realm: mcp
+                enabled: true
+                accessTokenLifespan: 1800
+                clients:
+                  - clientId: mcp-gateway
+                    publicClient: false
+                    secret: secret
+                    standardFlowEnabled: false
+                    directAccessGrantsEnabled: true
+                    attributes:
+                      standard.token.exchange.enabled: "true"
+                    defaultClientScopes:
+                      - roles
+                    optionalClientScopes:
+                      - groups
+                      - profile
+                  - clientId: mcp-token-browser
+                    publicClient: true
+                    standardFlowEnabled: true
+                    directAccessGrantsEnabled: false
+                    redirectUris:
+                      - ${DOMAIN}/auth/callback
+                    webOrigins:
+                      - ${DOMAIN}
+                    defaultClientScopes:
+                      - basic
+                      - email
+                      - profile
+                      - roles
+                  - clientId: mcp-test/test-server1
+                    publicClient: true
+                    standardFlowEnabled: false
+                    fullScopeAllowed: false
+                  - clientId: mcp-test/test-server2
+                    publicClient: true
+                    standardFlowEnabled: false
+                    fullScopeAllowed: false
+                  - clientId: mcp-test/test-server3
+                    publicClient: true
+                    standardFlowEnabled: false
+                    fullScopeAllowed: false
+                  - clientId: mcp-test/oidc-server
+                    publicClient: true
+                    standardFlowEnabled: false
+                    fullScopeAllowed: false
+                  - clientId: mcp-test/kubernetes-mcp-server
+                    publicClient: true
+                    standardFlowEnabled: false
+                    fullScopeAllowed: false
+                roles:
+                  client:
+                    mcp-gateway:
+                      - name: impersonator
+                    mcp-test/test-server1:
+                      - name: tool:greet
+                      - name: tool:headers
+                      - name: tool:slow
+                      - name: tool:time
+                      - name: prompt:greet
+                    mcp-test/test-server2:
+                      - name: tool:auth1234
+                      - name: tool:headers
+                      - name: tool:hello_world
+                      - name: tool:slow
+                      - name: tool:time
+                    mcp-test/test-server3:
+                      - name: tool:time
+                      - name: tool:add
+                      - name: tool:dozen
+                      - name: tool:pi
+                    mcp-test/oidc-server:
+                      - name: tool:hello_world
+                    mcp-test/kubernetes-mcp-server:
+                      - name: tool:configuration_contexts_list
+                      - name: tool:configuration_view
+                      - name: tool:events_list
+                      - name: tool:helm_install
+                      - name: tool:helm_list
+                      - name: tool:helm_uninstall
+                      - name: tool:namespaces_list
+                      - name: tool:nodes_log
+                      - name: tool:nodes_stats_summary
+                      - name: tool:nodes_top
+                      - name: tool:pods_delete
+                      - name: tool:pods_exec
+                      - name: tool:pods_get
+                      - name: tool:pods_list
+                      - name: tool:pods_list_in_namespace
+                      - name: tool:pods_log
+                      - name: tool:pods_run
+                      - name: tool:pods_top
+                      - name: tool:resources_create_or_update
+                      - name: tool:resources_delete
+                      - name: tool:resources_get
+                      - name: tool:resources_list
+                groups:
+                  - name: mcp-users
+                    clientRoles:
+                      mcp-gateway:
+                        - impersonator
+                  - name: accounting
+                    clientRoles:
+                      mcp-test/test-server1:
+                        - tool:greet
+                        - prompt:greet
+                      mcp-test/test-server2:
+                        - tool:headers
+                      mcp-test/test-server3:
+                        - tool:add
+                      mcp-test/oidc-server:
+                        - tool:hello_world
+                  - name: engineering
+                    clientRoles:
+                      mcp-test/kubernetes-mcp-server:
+                        - tool:configuration_contexts_list
+                        - tool:configuration_view
+                        - tool:events_list
+                        - tool:helm_install
+                        - tool:helm_list
+                        - tool:helm_uninstall
+                        - tool:namespaces_list
+                        - tool:nodes_log
+                        - tool:nodes_stats_summary
+                        - tool:nodes_top
+                        - tool:pods_delete
+                        - tool:pods_exec
+                        - tool:pods_get
+                        - tool:pods_list
+                        - tool:pods_list_in_namespace
+                        - tool:pods_log
+                        - tool:pods_run
+                        - tool:pods_top
+                        - tool:resources_create_or_update
+                        - tool:resources_delete
+                        - tool:resources_get
+                        - tool:resources_list
+                users:
+                  - username: mcp
+                    email: mcp@example.com
+                    firstName: mcp
+                    lastName: mcp
+                    enabled: true
+                    emailVerified: true
+                    credentials:
+                      - type: password
+                        value: mcp
+                        temporary: false
+                    realmRoles:
+                      - default-roles-mcp
+                      - offline_access
+                    groups:
+                      - mcp-users
+                      - accounting
+                      - engineering
+                clientScopes:
+                  - name: groups
+                    protocol: openid-connect
+                    attributes:
+                      display.on.consent.screen: "false"
+                      include.in.token.scope: "true"
+                    protocolMappers:
+                      - name: groups
+                        protocol: openid-connect
+                        protocolMapper: oidc-group-membership-mapper
+                        config:
+                          claim.name: groups
+                          full.path: "false"
+                          id.token.claim: "true"
+                          access.token.claim: "true"
+                          userinfo.token.claim: "true"
+                  - name: profile
+                    description: "OpenID Connect built-in scope: profile"
+                    protocol: openid-connect
+                    attributes:
+                      include.in.token.scope: "true"
+                      consent.screen.text: "\${profileScopeConsentText}"
+                      display.on.consent.screen: "true"
+                    protocolMappers:
+                      - name: updated at
+                        protocol: openid-connect
+                        protocolMapper: oidc-usermodel-attribute-mapper
+                        consentRequired: false
+                        config:
+                          introspection.token.claim: "true"
+                          userinfo.token.claim: "true"
+                          user.attribute: updatedAt
+                          id.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: updated_at
+                          jsonType.label: long
+                      - name: gender
+                        protocol: openid-connect
+                        protocolMapper: oidc-usermodel-attribute-mapper
+                        consentRequired: false
+                        config:
+                          introspection.token.claim: "true"
+                          userinfo.token.claim: "true"
+                          user.attribute: gender
+                          id.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: gender
+                          jsonType.label: String
+                      - name: given name
+                        protocol: openid-connect
+                        protocolMapper: oidc-usermodel-attribute-mapper
+                        consentRequired: false
+                        config:
+                          introspection.token.claim: "true"
+                          userinfo.token.claim: "true"
+                          user.attribute: firstName
+                          id.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: given_name
+                          jsonType.label: String
+                      - name: full name
+                        protocol: openid-connect
+                        protocolMapper: oidc-full-name-mapper
+                        consentRequired: false
+                        config:
+                          id.token.claim: "true"
+                          introspection.token.claim: "true"
+                          access.token.claim: "true"
+                          userinfo.token.claim: "true"
+                      - name: zoneinfo
+                        protocol: openid-connect
+                        protocolMapper: oidc-usermodel-attribute-mapper
+                        consentRequired: false
+                        config:
+                          introspection.token.claim: "true"
+                          userinfo.token.claim: "true"
+                          user.attribute: zoneinfo
+                          id.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: zoneinfo
+                          jsonType.label: String
+                      - name: middle name
+                        protocol: openid-connect
+                        protocolMapper: oidc-usermodel-attribute-mapper
+                        consentRequired: false
+                        config:
+                          introspection.token.claim: "true"
+                          userinfo.token.claim: "true"
+                          user.attribute: middleName
+                          id.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: middle_name
+                          jsonType.label: String
+                      - name: profile
+                        protocol: openid-connect
+                        protocolMapper: oidc-usermodel-attribute-mapper
+                        consentRequired: false
+                        config:
+                          introspection.token.claim: "true"
+                          userinfo.token.claim: "true"
+                          user.attribute: profile
+                          id.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: profile
+                          jsonType.label: String
+                      - name: family name
+                        protocol: openid-connect
+                        protocolMapper: oidc-usermodel-attribute-mapper
+                        consentRequired: false
+                        config:
+                          introspection.token.claim: "true"
+                          userinfo.token.claim: "true"
+                          user.attribute: lastName
+                          id.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: family_name
+                          jsonType.label: String
+                      - name: nickname
+                        protocol: openid-connect
+                        protocolMapper: oidc-usermodel-attribute-mapper
+                        consentRequired: false
+                        config:
+                          introspection.token.claim: "true"
+                          userinfo.token.claim: "true"
+                          user.attribute: nickname
+                          id.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: nickname
+                          jsonType.label: String
+                      - name: locale
+                        protocol: openid-connect
+                        protocolMapper: oidc-usermodel-attribute-mapper
+                        consentRequired: false
+                        config:
+                          introspection.token.claim: "true"
+                          userinfo.token.claim: "true"
+                          user.attribute: locale
+                          id.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: locale
+                          jsonType.label: String
+                      - name: picture
+                        protocol: openid-connect
+                        protocolMapper: oidc-usermodel-attribute-mapper
+                        consentRequired: false
+                        config:
+                          introspection.token.claim: "true"
+                          userinfo.token.claim: "true"
+                          user.attribute: picture
+                          id.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: picture
+                          jsonType.label: String
+                      - name: birthdate
+                        protocol: openid-connect
+                        protocolMapper: oidc-usermodel-attribute-mapper
+                        consentRequired: false
+                        config:
+                          introspection.token.claim: "true"
+                          userinfo.token.claim: "true"
+                          user.attribute: birthdate
+                          id.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: birthdate
+                          jsonType.label: String
+                      - name: website
+                        protocol: openid-connect
+                        protocolMapper: oidc-usermodel-attribute-mapper
+                        consentRequired: false
+                        config:
+                          introspection.token.claim: "true"
+                          userinfo.token.claim: "true"
+                          user.attribute: website
+                          id.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: website
+                          jsonType.label: String
+                      - name: username
+                        protocol: openid-connect
+                        protocolMapper: oidc-usermodel-attribute-mapper
+                        consentRequired: false
+                        config:
+                          introspection.token.claim: "true"
+                          userinfo.token.claim: "true"
+                          user.attribute: username
+                          id.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: preferred_username
+                          jsonType.label: String
+                  - name: roles
+                    description: OpenID Connect scope for add user roles to the access token
+                    protocol: openid-connect
+                    attributes:
+                      include.in.token.scope: "false"
+                      consent.screen.text: "\${rolesScopeConsentText}"
+                      display.on.consent.screen: "true"
+                    protocolMappers:
+                      - name: realm roles
+                        protocol: openid-connect
+                        protocolMapper: oidc-usermodel-realm-role-mapper
+                        consentRequired: false
+                        config:
+                          user.attribute: foo
+                          introspection.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: realm_access.roles
+                          jsonType.label: String
+                          multivalued: "true"
+                      - name: client roles
+                        protocol: openid-connect
+                        protocolMapper: oidc-usermodel-client-role-mapper
+                        consentRequired: false
+                        config:
+                          user.attribute: foo
+                          introspection.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: "resource_access.\${client_id}.roles"
+                          jsonType.label: String
+                          multivalued: "true"
+                      - name: audience resolve
+                        protocol: openid-connect
+                        protocolMapper: oidc-audience-resolve-mapper
+                        consentRequired: false
+                        config:
+                          introspection.token.claim: "true"
+                          access.token.claim: "true"
+                  - name: email
+                    description: "OpenID Connect built-in scope: email"
+                    protocol: openid-connect
+                    attributes:
+                      include.in.token.scope: "true"
+                      consent.screen.text: "\${emailScopeConsentText}"
+                      display.on.consent.screen: "true"
+                    protocolMappers:
+                      - name: email
+                        protocol: openid-connect
+                        protocolMapper: oidc-usermodel-attribute-mapper
+                        consentRequired: false
+                        config:
+                          introspection.token.claim: "true"
+                          userinfo.token.claim: "true"
+                          user.attribute: email
+                          id.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: email
+                          jsonType.label: String
+                      - name: email verified
+                        protocol: openid-connect
+                        protocolMapper: oidc-usermodel-property-mapper
+                        consentRequired: false
+                        config:
+                          introspection.token.claim: "true"
+                          userinfo.token.claim: "true"
+                          user.attribute: emailVerified
+                          id.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: email_verified
+                          jsonType.label: boolean
+                  - name: basic
+                    description: OpenID Connect scope for add all basic claims to the token
+                    protocol: openid-connect
+                    attributes:
+                      include.in.token.scope: "false"
+                      display.on.consent.screen: "false"
+                    protocolMappers:
+                      - name: sub
+                        protocol: openid-connect
+                        protocolMapper: oidc-sub-mapper
+                        consentRequired: false
+                        config:
+                          introspection.token.claim: "true"
+                          access.token.claim: "true"
+                      - name: auth_time
+                        protocol: openid-connect
+                        protocolMapper: oidc-usersessionmodel-note-mapper
+                        consentRequired: false
+                        config:
+                          user.session.note: AUTH_TIME
+                          id.token.claim: "true"
+                          introspection.token.claim: "true"
+                          access.token.claim: "true"
+                          claim.name: auth_time
+                          jsonType.label: long
+                defaultDefaultClientScopes:
+                  - basic
+                  - email
+                  - profile
+                  - roles
+                defaultOptionalClientScopes:
+                  - groups
+                  - offline_access
+                components:
+                  org.keycloak.services.clientregistration.policy.ClientRegistrationPolicy:
+                    - name: Consent Required
+                      providerId: consent-required
+                      subType: anonymous
+                      subComponents: {}
+                      config: {}
+                    - name: Allowed Protocol Mapper Types
+                      providerId: allowed-protocol-mappers
+                      subType: anonymous
+                      subComponents: {}
+                      config:
+                        allowed-protocol-mapper-types:
+                          - saml-role-list-mapper
+                          - oidc-address-mapper
+                          - saml-user-attribute-mapper
+                          - saml-user-property-mapper
+                          - oidc-full-name-mapper
+                          - oidc-usermodel-attribute-mapper
+                          - oidc-usermodel-property-mapper
+                          - oidc-sha256-pairwise-sub-mapper
+                    - name: Allowed Client Scopes
+                      providerId: allowed-client-templates
+                      subType: anonymous
+                      subComponents: {}
+                      config:
+                        allow-default-scopes:
+                          - "true"
+                    - name: Allowed Client Scopes
+                      providerId: allowed-client-templates
+                      subType: authenticated
+                      subComponents: {}
+                      config:
+                        allow-default-scopes:
+                          - "true"
+                    - name: Max Clients Limit
+                      providerId: max-clients
+                      subType: anonymous
+                      subComponents: {}
+                      config:
+                        max-clients:
+                          - "200"
+                    - name: Allowed Protocol Mapper Types
+                      providerId: allowed-protocol-mappers
+                      subType: authenticated
+                      subComponents: {}
+                      config:
+                        allowed-protocol-mapper-types:
+                          - saml-user-property-mapper
+                          - oidc-usermodel-property-mapper
+                          - oidc-full-name-mapper
+                          - oidc-sha256-pairwise-sub-mapper
+                          - saml-user-attribute-mapper
+                          - oidc-address-mapper
+                          - saml-role-list-mapper
+                          - oidc-usermodel-attribute-mapper
+        EOF
+  workspaces:
+    - name: shared-workspace

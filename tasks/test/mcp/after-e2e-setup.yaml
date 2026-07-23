@@ -1,0 +1,210 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: after-e2e-setup
+spec:
+  params:
+    - description: Path to workspace kubeconfig
+      name: kubeconfig-path
+      type: string
+    - description: Namespace MCP Gateway was deployed to
+      name: mcp-gateway-namespace
+      type: string
+    - description: Gateway API provider (ocp/ossm3)
+      name: istio-provider
+      type: string
+  steps:
+    - name: setup-mcp-gateway-extension
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        # Get cluster base domain
+        export BASE_DOMAIN=$(oc get dns cluster -o jsonpath='{.spec.baseDomain}')
+        # Construct hosts
+        export PUBLIC_HOST="mcp.apps.${BASE_DOMAIN}"
+        # Determine gateway class name based on provider
+        if [ "$(params.istio-provider)" = "ocp" ]; then
+          export GATEWAY_CLASS_NAME=openshift-default
+        else
+          export GATEWAY_CLASS_NAME=istio
+        fi
+
+        GATEWAY_TLS_SECRET="$(kubectl get ingresscontroller default -n openshift-ingress-operator -o jsonpath='{.spec.defaultCertificate.name}')"
+
+        # CA bundle that Router/Broken must trust to be able to communicate with Gateway via HTTPS
+        kubectl apply -n $(params.mcp-gateway-namespace) -f - <<EOF
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: trusted-ca-bundle
+            labels:
+              config.openshift.io/inject-trusted-cabundle: "true"
+          data: {}
+        EOF
+
+        # Add 'mcp' HTTP listener
+        if ! kubectl get gateway mcp-gateway -n gateway-system -o jsonpath='{.spec.listeners[*].name}' | tr ' ' '\n' | grep -q "^mcp$"; then
+          kubectl patch gateway mcp-gateway -n gateway-system --type=json -p='[{
+            "op": "add", "path": "/spec/listeners/-", "value": {
+              "name": "mcp",
+              "port": 8080,
+              "protocol": "HTTP",
+              "hostname": "mcp.apps.'"$BASE_DOMAIN"'",
+              "allowedRoutes": {
+                "namespaces": {
+                    "from": "All"
+                }
+              }
+            }
+          }]'
+          echo "Added listener 'mcp' with hostname 'mcp.apps.$BASE_DOMAIN'"
+        else
+          echo "Listener 'mcp' already exists, skipping"
+        fi
+
+        # Add 'mcp-tls' HTTPS listener
+        if ! kubectl get gateway mcp-gateway -n gateway-system -o jsonpath='{.spec.listeners[*].name}' | grep -qw "mcp-tls"; then
+          kubectl patch gateway mcp-gateway -n gateway-system --type=json -p='[{
+            "op": "add", "path": "/spec/listeners/-", "value": {
+              "name": "mcp-tls",
+              "port": 8443,
+              "protocol": "HTTPS",
+              "hostname": "*.apps.'"$BASE_DOMAIN"'",
+              "tls": {
+                "mode": "Terminate",
+                "certificateRefs": [{
+                  "name": "'"$GATEWAY_TLS_SECRET"'",
+                  "kind": "Secret"
+                }]
+              },
+              "allowedRoutes": {
+                "namespaces": {
+                    "from": "All"
+                }
+              }
+            }
+          }]'
+          echo "Added HTTPS listener 'mcp-tls' with hostname '*.apps.$BASE_DOMAIN'"
+        else
+          echo "Listener 'mcp-tls' already exists, skipping"
+        fi
+
+        # Create ReferenceGrant to allow MCPGatewayExtension to reference Gateway across namespaces
+        echo "Creating ReferenceGrant in gateway-system namespace..."
+        kubectl apply -n gateway-system -f - <<EOF
+        apiVersion: gateway.networking.k8s.io/v1beta1
+        kind: ReferenceGrant
+        metadata:
+          name: mcp-gateway-extension-to-gateway
+        spec:
+          from:
+          - group: mcp.kuadrant.io
+            kind: MCPGatewayExtension
+            namespace: $(params.mcp-gateway-namespace)
+          to:
+          - group: gateway.networking.k8s.io
+            kind: Gateway
+        EOF
+
+        echo "ReferenceGrant created successfully"
+
+        # Create MCPGatewayExtension
+        kubectl apply -n $(params.mcp-gateway-namespace) -f - <<EOF
+        apiVersion: mcp.kuadrant.io/v1alpha1
+        kind: MCPGatewayExtension
+        metadata:
+          name: mcp-gateway-extension
+        spec:
+          publicHost: ${PUBLIC_HOST}
+          targetRef:
+            group: gateway.networking.k8s.io
+            kind: Gateway
+            name: mcp-gateway
+            namespace: gateway-system
+            sectionName: mcp-tls
+          urlElicitation: Enabled
+        EOF
+
+        echo "MCPGatewayExtension created successfully"
+
+    - name: register-test-servers
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      env:
+      - name: KUBECONFIG
+        value: $(params.kubeconfig-path)
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        TIMEOUT=240s
+        export BASE_DOMAIN=$(oc get dns cluster -o jsonpath='{.spec.baseDomain}')
+
+        cd "$(workspaces.shared-workspace.path)/mcp-gateway"
+
+        # create mcp-test namespace if it does not exist
+        oc create namespace mcp-test --dry-run=client -o yaml | oc apply -f -
+
+        # deploy test MCP servers
+        oc apply -k config/test-servers/
+        # patch imagePullPolicy to pull the image from remote registry
+        for dep in $(oc get deployments -n mcp-test -o jsonpath='{.items[*].metadata.name}'); do
+          oc patch deployment "$dep" -n mcp-test --type='json' -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Always"}]'
+        done
+
+        # modify HTTPRoute hostnames to match 'mcp-tls' HTTPS GW Listener
+        for route in $(oc get httproute -n mcp-test -o jsonpath='{.items[*].metadata.name}'); do
+          oc get httproute "$route" -n mcp-test -o yaml | \
+          sed 's/\.mcp\.local/.apps.'"${BASE_DOMAIN}"'/g' | \
+          oc apply -f -
+        done
+
+        # wait for test MCP servers to get ready
+        oc wait --for=condition=available --timeout=180s deployment/mcp-test-server1 -n mcp-test
+        oc wait --for=condition=available --timeout=180s deployment/mcp-test-server2 -n mcp-test
+
+        echo "Registering MCP test servers..."
+
+        # Apply MCPServerRegistration CRs
+        kubectl apply -f config/samples/mcpserverregistration-test-servers-base.yaml
+        kubectl apply -f config/samples/mcpserverregistration-test-servers-extended.yaml
+
+        echo "Waiting for MCPServerRegistration CRs to be ready..."
+
+        # Wait for all MCPServerRegistration resources in mcp-test namespace
+        MCPSR_LIST=$(kubectl get mcpserverregistration -n mcp-test -o jsonpath='{.items[*].metadata.name}')
+
+        if [ -n "$MCPSR_LIST" ]; then
+          for mcpsr in $MCPSR_LIST; do
+            echo "Waiting for MCPServerRegistration/$mcpsr to be ready..."
+            kubectl wait --for=condition=Ready mcpserverregistration/$mcpsr -n mcp-test --timeout=$TIMEOUT || {
+              echo "Warning: MCPServerRegistration/$mcpsr did not become ready within $TIMEOUT"
+            }
+          done
+          echo "All MCPServerRegistration CRs processed"
+        else
+          echo "Warning: No MCPServerRegistration resources found in mcp-test namespace"
+        fi
+
+        # Delete AuthPolicies - some are created as part of Auth E2E setup
+        oc delete authpolicy --all -n gateway-system --wait=true --ignore-not-found=true
+        oc delete authpolicy --all -n "$(params.mcp-gateway-namespace)" --wait=true --ignore-not-found=true
+
+        # Patching mcp-gateway Deployment to trust HTTPS GW Listener's certificate
+        kubectl patch deployment mcp-gateway -n "$(params.mcp-gateway-namespace)" --type='json' -p='[
+          {"op":"add","path":"/spec/template/spec/volumes/-","value":{"name":"gateway-ca-cert","configMap":{"name":"trusted-ca-bundle"}}},
+          {"op":"add","path":"/spec/template/spec/containers/0/volumeMounts/-","value":{"name":"gateway-ca-cert","mountPath":"/etc/gateway-ca-cert","readOnly":true}},
+          {"op":"add","path":"/spec/template/spec/containers/0/command/-","value":"--gateway-ca-cert=/etc/gateway-ca-cert/ca-bundle.crt"}
+        ]'
+        kubectl rollout status deployment/mcp-gateway -n $(params.mcp-gateway-namespace) --timeout=120s
+
+        echo "After-e2e setup completed successfully"
+
+  workspaces:
+    - name: shared-workspace

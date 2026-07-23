@@ -31,24 +31,37 @@ spec:
     - description: Extensions image to overwrite default one.
       name: extensions-image
       type: string
+    - description: If set to 'true' tools operators and instances will be installed
+      name: install-tools
+      type: string
+    - description: If set to 'true' Kuadrant operators and instances will be installed
+      name: install-kuadrant
+      type: string
+    - description: Secret name containing additional Helm values manifest (additionalManifests.yaml)
+      name: additional-manifests-secret
+      type: string
   steps:
   # Uninstall steps first(cleanup before install)
   - name: remove-leftovers-kuadrant-ns
     args:
       - >-
-        for crd in $(kubectl get crd -o name | grep "kuadrant" | sed 's/.*\/\(.*\)/\1/'); do
-            if [ "$crd" = "dnsrecords.kuadrant.io" ]; then
-                for record in $(kubectl get --chunk-size=0 -o name -n "kuadrant" "$crd"); do
-                    if kubectl get -n "kuadrant" $record -o jsonpath='{.status.conditions}' | grep "The dns provider could not be loaded"; then
-                       echo "Force deleting (deleting finalizers) due to missing secret on: $record";
-                       kubectl delete "$record" -n "kuadrant" --wait=false;
-                       kubectl patch "$record" -n "kuadrant" --type=merge -p '{"metadata":{"finalizers":null}}';
-                    fi
-                done
-            fi 
-            kubectl get --chunk-size=0 -o name -n "kuadrant" "$crd" |\
-            xargs --no-run-if-empty -P 20 -n 1 kubectl delete --ignore-not-found -n "kuadrant"
-        done
+        if [ "$(params.install-kuadrant)" = "true" ]; then
+          for crd in $(kubectl get crd -o name | grep "kuadrant" | sed 's/.*\/\(.*\)/\1/'); do
+              if [ "$crd" = "dnsrecords.kuadrant.io" ]; then
+                  for record in $(kubectl get --chunk-size=0 -o name -n "kuadrant" "$crd"); do
+                      if kubectl get -n "kuadrant" $record -o jsonpath='{.status.conditions}' | grep "The dns provider could not be loaded"; then
+                         echo "Force deleting (deleting finalizers) due to missing secret on: $record";
+                         kubectl delete "$record" -n "kuadrant" --wait=false;
+                         kubectl patch "$record" -n "kuadrant" --type=merge -p '{"metadata":{"finalizers":null}}';
+                      fi
+                  done
+              fi
+              kubectl get --chunk-size=0 -o name -n "kuadrant" "$crd" |\
+              xargs --no-run-if-empty -P 20 -n 1 kubectl delete --ignore-not-found -n "kuadrant"
+          done
+        else
+          echo "Skipping Kuadrant cleanup (install-kuadrant=false)"
+        fi
     command:
       - /bin/bash
       - -vc
@@ -59,7 +72,12 @@ spec:
     imagePullPolicy: Always
   - name: uninstall-instances
     args:
-      - helm uninstall -n=default --ignore-not-found --wait kuadrant-instances
+      - |
+        if [ "$(params.install-kuadrant)" = "true" ]; then
+          helm uninstall -n=default --ignore-not-found --wait kuadrant-instances
+        else
+          echo "Skipping Kuadrant instances cleanup (install-kuadrant=false)"
+        fi
     command:
       - /bin/bash
       - -vc
@@ -70,7 +88,12 @@ spec:
     imagePullPolicy: Always
   - name: uninstall-operators
     args:
-      - helm uninstall -n=default --ignore-not-found --wait kuadrant-operators
+      - |
+        if [ "$(params.install-kuadrant)" = "true" ]; then
+          helm uninstall -n=default --ignore-not-found --wait kuadrant-operators
+        else
+          echo "Skipping Kuadrant operators cleanup (install-kuadrant=false)"
+        fi
     command:
       - /bin/bash
       - -vc
@@ -81,7 +104,12 @@ spec:
     imagePullPolicy: Always
   - name: delete-cert-manager-namespace
     args:
-      - kubectl delete --ignore-not-found ns/cert-manager
+      - |
+        if [ "$(params.install-kuadrant)" = "true" ]; then
+          kubectl delete --ignore-not-found ns/cert-manager
+        else
+          echo "Skipping cert-manager namespace cleanup (install-kuadrant=false)"
+        fi
     command:
       - /bin/bash
       - -vc
@@ -92,7 +120,12 @@ spec:
     imagePullPolicy: Always
   - name: delete-kuadrant-crd
     args:
-      - kubectl get crd -o name | grep "kuadrant" | xargs --no-run-if-empty kubectl delete
+      - |
+        if [ "$(params.install-kuadrant)" = "true" ]; then
+          kubectl get crd -o name | grep "kuadrant" | xargs --no-run-if-empty kubectl delete
+        else
+          echo "Skipping Kuadrant CRD cleanup (install-kuadrant=false)"
+        fi
     command:
       - /bin/bash
       - -vc
@@ -103,7 +136,12 @@ spec:
     imagePullPolicy: Always
   - name: uninstall-tools-instances
     args:
-      - helm uninstall -n=default --ignore-not-found --wait tools-instances
+      - |
+        if [ "$(params.install-tools)" = "true" ]; then
+          helm uninstall -n=default --ignore-not-found --wait tools-instances
+        else
+          echo "Skipping tools instances cleanup (install-tools=false)"
+        fi
     command:
       - /bin/bash
       - -vc
@@ -114,7 +152,12 @@ spec:
     imagePullPolicy: Always
   - name: uninstall-tools-operators
     args:
-      - helm uninstall -n=default --ignore-not-found --wait tools-operators
+      - |
+        if [ "$(params.install-tools)" = "true" ]; then
+          helm uninstall -n=default --ignore-not-found --wait tools-operators
+        else
+          echo "Skipping tools operators cleanup (install-tools=false)"
+        fi
     command:
       - /bin/bash
       - -vc
@@ -128,12 +171,17 @@ spec:
   - name: helm-install-tools-operators
     script: |
       #!/bin/bash -v
-      helm install -n=default \
-      --repo https://kuadrant.io/helm-charts-olm \
-      $(params.additional-helm-tools-flags) \
-      --wait --wait-for-jobs --debug \
-      tools-operators \
-      tools-operators
+      set -e
+      if [ "$(params.install-tools)" = "true" ]; then
+        helm install -n=default \
+        --repo https://kuadrant.io/helm-charts-olm \
+        $(params.additional-helm-tools-flags) \
+        --wait --wait-for-jobs --debug \
+        tools-operators \
+        tools-operators
+      else
+        echo "Skipping tools operators install (install-tools=false)"
+      fi
     env:
       - name: KUBECONFIG
         value: $(params.kubeconfig-path)
@@ -142,12 +190,17 @@ spec:
   - name: helm-install-tools-instances
     script: |
       #!/bin/bash -v
-      helm install -n=default \
-      --repo https://kuadrant.io/helm-charts-olm \
-      $(params.additional-helm-tools-flags) \
-      --wait --wait-for-jobs --debug --timeout=10m0s \
-      tools-instances \
-      tools-instances
+      set -e
+      if [ "$(params.install-tools)" = "true" ]; then
+        helm install -n=default \
+        --repo https://kuadrant.io/helm-charts-olm \
+        $(params.additional-helm-tools-flags) \
+        --wait --wait-for-jobs --debug --timeout=10m0s \
+        tools-instances \
+        tools-instances
+      else
+        echo "Skipping tools instances install (install-tools=false)"
+      fi
     env:
       - name: KUBECONFIG
         value: $(params.kubeconfig-path)
@@ -156,21 +209,26 @@ spec:
   - name: helm-install-operators
     script: |
       #!/bin/bash -v
-      helm install -n=default \
-      --repo https://kuadrant.io/helm-charts-olm \
-      --values=/mount/values-additional-manifests/additionalManifests.yaml \
-      --values=/mount/values-extensions-manifests/extensionsManifests.yaml \
-      --set=kuadrant.indexImage="$(params.index-image)" \
-      --set=kuadrant.channel="$(params.channel)" \
-      --set=kuadrant.operatorName="$(params.operator-name)" \
-      --set=kuadrant.extensionsImage="$(params.extensions-image)" \
-      --set=istio.istioProvider="$(params.istio-provider)" \
-      --set=gatewayAPI.version="$(params.gateway-crd)" \
-      --set=tools.enabled=true \
-      $(params.additional-helm-flags) \
-      --wait --wait-for-jobs --debug \
-      kuadrant-operators \
-      kuadrant-operators
+      set -e
+      if [ "$(params.install-kuadrant)" = "true" ]; then
+        helm install -n=default \
+          --repo https://kuadrant.io/helm-charts-olm \
+          --values=/mount/values-additional-manifests/additionalManifests.yaml \
+          --values=/mount/values-extensions-manifests/extensionsManifests.yaml \
+          --set=kuadrant.indexImage="$(params.index-image)" \
+          --set=kuadrant.channel="$(params.channel)" \
+          --set=kuadrant.operatorName="$(params.operator-name)" \
+          --set=kuadrant.extensionsImage="$(params.extensions-image)" \
+          --set=istio.istioProvider="$(params.istio-provider)" \
+          --set=gatewayAPI.version="$(params.gateway-crd)" \
+          --set=tools.enabled=true \
+          $(params.additional-helm-flags) \
+          --wait --wait-for-jobs --debug \
+          kuadrant-operators \
+          kuadrant-operators
+      else
+        echo "Skipping Kuadrant operators install (install-kuadrant=false)"
+      fi
     volumeMounts:
       - mountPath: /mount/values-additional-manifests
         name: values-additional-manifests
@@ -184,19 +242,24 @@ spec:
   - name: helm-install-instances
     script: |
       #!/bin/bash -v
-      helm install -n=default \
-      --repo https://kuadrant.io/helm-charts-olm \
-      --values=/mount/values-additional-manifests/additionalManifests.yaml \
-      --set=kuadrant.indexImage="$(params.index-image)" \
-      --set=kuadrant.channel="$(params.channel)" \
-      --set=kuadrant.operatorName="$(params.operator-name)" \
-      --set=istio.istioProvider="$(params.istio-provider)" \
-      --set=gatewayAPI.version="$(params.gateway-crd)" \
-      --set=tools.enabled=true \
-      $(params.additional-helm-flags) \
-      --wait --wait-for-jobs --debug \
-      kuadrant-instances \
-      kuadrant-instances
+      set -e
+      if [ "$(params.install-kuadrant)" = "true" ]; then
+        helm install -n=default \
+          --repo https://kuadrant.io/helm-charts-olm \
+          --values=/mount/values-additional-manifests/additionalManifests.yaml \
+          --set=kuadrant.indexImage="$(params.index-image)" \
+          --set=kuadrant.channel="$(params.channel)" \
+          --set=kuadrant.operatorName="$(params.operator-name)" \
+          --set=istio.istioProvider="$(params.istio-provider)" \
+          --set=gatewayAPI.version="$(params.gateway-crd)" \
+          --set=tools.enabled=true \
+          $(params.additional-helm-flags) \
+          --wait --wait-for-jobs --debug \
+          kuadrant-instances \
+          kuadrant-instances
+      else
+        echo "Skipping Kuadrant instances install (install-kuadrant=false)"
+      fi
     volumeMounts:
       - mountPath: /mount/values-additional-manifests
         name: values-additional-manifests
@@ -207,7 +270,7 @@ spec:
     imagePullPolicy: Always
   volumes:
     - secret:
-        secretName: values-additional-manifests
+        secretName: $(params.additional-manifests-secret)
       name: values-additional-manifests
     - configMap:
         name: values-extensions-manifests
