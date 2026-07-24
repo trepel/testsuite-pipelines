@@ -78,6 +78,13 @@ kubectl create secret generic kua-azure-credentials --from-literal=APP_ID="xxx" 
 kubectl create secret generic aro-pull-secret --from-file=.dockerconfigjson=/path/to/your/auths.json  --type=kubernetes.io/dockerconfigjson -n ${PIPELINE_NAMESPACE}
 ```
 
+#### Resources required for MCP Gateway pipeline
+- Opaque Secret containing a GitHub Personal Access Token for MCP e2e tests. The secret name must be specified via the `github-pat-secret` input parameter. E.g.
+```shell
+kubectl create secret generic my-gh-pat --from-literal=token="ghp_xxxxxxxxxxxx" -n ${PIPELINE_NAMESPACE}
+```
+- The MCP Gateway pipeline also provisions OSD clusters and optionally deploys Kuadrant, so it may require resources from the **infra/** and **deploy/** sections above depending on configuration.
+
 #### Resources required for rapiDAST pipeline
 - Opaque secret containing credentials for Google Cloud storage where rapiDAST scan results will be stored. E.g.
 ```shell

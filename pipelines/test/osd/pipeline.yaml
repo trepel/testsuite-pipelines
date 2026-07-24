@@ -18,7 +18,7 @@ spec:
       name: provider-credentials
       type: string
     - default: 'us-east-1'
-      description: AWS Region to use - required for rosa only
+      description: AWS Region (ROSA only). For OSD, region is part of 'create-cmd-flags' which requires all creation flags to be specified together
       name: region
       type: string
     - default: staging

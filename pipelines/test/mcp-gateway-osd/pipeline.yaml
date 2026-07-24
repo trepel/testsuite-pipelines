@@ -1,0 +1,588 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: test-mcp-gateway-osd
+spec:
+  params:
+# OSD cluster provisioning parameters
+  - description: 'If not set to "true" then existing cluster will be used. The cluster must be created via OCM/HCC.'
+    name: provision-cluster
+    type: string
+    default: "true"
+  - description: Cluster type (osd-aws, osd-gcp, rosa)
+    name: cluster-type
+    type: string
+    default: osd-aws
+  - description: AWS Region (ROSA only). For OSD, region is part of 'create-cmd-flags' which requires all creation flags to be specified together
+    name: region
+    type: string
+    default: 'us-east-1'
+  - description: Cloud Provider credentials, leave empty to use defaults
+    name: provider-credentials
+    type: string
+    default: ""
+  - description: OCM/HCC instance (staging, production)
+    name: ocm-instance
+    type: string
+    default: staging
+  - description: OCM/HCC credentials
+    name: ocm-credentials
+    type: string
+    default: kua-ocm-stage-client-credentials
+  - description: Cluster name
+    name: cluster-name
+    type: string
+    default: kua-test
+  - description: Cluster creation flags. Leave empty to use defaults (they depend on Cloud Provider)
+    name: create-cmd-flags
+    type: string
+    default: ""
+  - description: Number of hours before HCC removes the cluster
+    name: cluster-lifespan
+    type: string
+    default: "7"
+# Infrastructure
+  - description: "Additional flags for tools helm, example '--set=tools.keycloak.keycloakProvider=deployment --set=tools.valkey.enable=false'"
+    name: additional-helm-tools-flags
+    type: string
+    default: ""
+  - description: Install or re-install tools (true/false)
+    name: install-tools
+    type: string
+    default: "true"
+# Gateway API
+  - description: Istio provider (ossm3, ocp); 'ossm3' (Service Mesh installed via OLM), 'ocp' (Istio managed by Gateway API (GatewayClass CR), available for OCP v4.19+)
+    name: istio-provider
+    type: string
+    default: ossm3
+  - description: GatewayAPI CRD version. [v1.3.0, v1.4.0, v1.5.0] available; leave empty if installing on Openshift 4.19+.
+    name: gateway-crd
+    type: string
+    default: ""
+# MCP Gateway
+  - description: Deploy MCP Gateway before running the MCP Gateway tests (true/false)
+    name: deploy-mcp-gateway
+    type: string
+    default: "true"
+  - description: Namespace to deploy MCP Gateway to
+    name: mcp-gateway-namespace
+    type: string
+    default: "mcp-system"
+  - description: MCP Gateway git repository URL
+    name: mcp-gateway-repo-url
+    type: string
+    default: https://github.com/Kuadrant/mcp-gateway.git
+  - description: MCP Gateway git revision (branch, tag, or commit) to checkout
+    name: mcp-gateway-revision
+    type: string
+    default: main
+  - description: MCP Gateway Helm chart version ('local' to use cloned repo, or specific version tag like '0.6.1')
+    name: mcp-gateway-chart-version
+    type: string
+    default: local
+  - description: MCP Controller catalog image
+    name: mcp-controller-catalog-image
+    type: string
+    default: ghcr.io/kuadrant/mcp-controller-catalog:main
+  - description: If set to 'true' the 'mcp-controller-catalog-image' param is ignored. Official Catalog is used instead
+    name: install-productized-version
+    type: string
+    default: "false"
+  - description: If set to 'true' Service Mesh will be installed (true/false)
+    name: install-service-mesh
+    type: string
+    default: "true"
+  - description: MCP Gateway OLM channel. Can be 'preview' (tech preview, nightlies) or 'stable' (releases)
+    name: channel
+    type: string
+    default: preview
+# Kuadrant/RHCL
+  - description: Install Kuadrant alongside MCP Gateway (true/false)
+    name: install-kuadrant
+    type: string
+    default: "false"
+  - description: Kuadrant operator catalog image
+    name: kuadrant-index-image
+    type: string
+    default: ""
+  - description: Kuadrant OLM channel. Can be 'preview' (nightlies) or 'stable' (releases)
+    name: kuadrant-channel
+    type: string
+    default: stable
+  - description: Kuadrant operator name ('kuadrant-operator' or 'rhcl-operator')
+    name: kuadrant-operator-name
+    type: string
+    default: rhcl-operator
+  - description: Additional helm flags for Kuadrant operators/instances (e.g., '--set=kuadrant.installPlanApproval=Manual')
+    name: kuadrant-additional-helm-flags
+    type: string
+    default: ""
+  - description: Extensions image to overwrite default one.
+    name: extensions-image
+    type: string
+    default: "quay.io/kuadrant/internal-extensions:latest"
+  - description: Secret name containing additional Helm values manifest (additionalManifests.yaml)
+    name: additional-manifests-secret
+    type: string
+    default: values-additional-manifests
+# Tests
+  - description: Run MCP e2e tests (true/false)
+    name: run-e2e-tests
+    type: string
+    default: "true"
+  - description: Run MCP auth e2e tests (true/false)
+    name: run-auth-e2e-tests
+    type: string
+    default: "true"
+  - description: Run MCP conformance tests (true/false)
+    name: run-conformance-tests
+    type: string
+    default: "true"
+  - description: MCP conformance test suite version
+    name: conformance-version
+    type: string
+    default: "0.1.15"
+  - description: Secret name containing GitHub PAT for MCP e2e tests
+    name: github-pat-secret
+    type: string
+    default: trepel-gh-pat
+# Cleanup
+  - description: If set to 'true' the OSD cluster will be deleted at the end
+    name: cleanup
+    type: string
+    default: "false"
+  workspaces:
+  - name: shared-workspace
+  tasks:
+# ---- OSD Cluster Provisioning ----
+  - name: ocm-login
+    params:
+      - name: ocm-instance
+        value: $(params.ocm-instance)
+      - name: ocm-credentials
+        value: $(params.ocm-credentials)
+    taskRef:
+      kind: Task
+      name: ocm-login
+    workspaces:
+      - name: shared-workspace
+  - name: parameter-sanity-check
+    params:
+      - name: cluster-type
+        value: $(params.cluster-type)
+      - name: cluster-name
+        value: $(params.cluster-name)
+      - name: provider-credentials
+        value: $(params.provider-credentials)
+      - name: create-cmd-flags
+        value: $(params.create-cmd-flags)
+      - name: index-image
+        value: $(params.kuadrant-index-image)
+      - name: channel
+        value: $(params.kuadrant-channel)
+      - name: operator-name
+        value: $(params.kuadrant-operator-name)
+      - name: provision-cluster
+        value: $(params.provision-cluster)
+    runAfter:
+      - ocm-login
+    taskRef:
+      kind: Task
+      name: parameter-sanity-check
+    workspaces:
+      - name: shared-workspace
+  - name: rosa-login
+    when:
+      - input: "$(params.cluster-type)"
+        operator: in
+        values: ['rosa']
+    params:
+      - name: ocm-instance
+        value: $(params.ocm-instance)
+      - name: ocm-credentials
+        value: $(params.ocm-credentials)
+      - name: region
+        value: $(params.region)
+      - name: aws-credentials
+        value: $(tasks.parameter-sanity-check.results.provider-credentials)
+    runAfter:
+      - parameter-sanity-check
+    taskRef:
+      kind: Task
+      name: rosa-login
+    workspaces:
+      - name: shared-workspace
+  - name: provision-osd-aws
+    when:
+      - input: "$(params.cluster-type)"
+        operator: in
+        values: ['osd-aws']
+    params:
+      - name: aws-credentials
+        value: $(tasks.parameter-sanity-check.results.provider-credentials)
+      - name: create-cmd-flags
+        value: $(tasks.parameter-sanity-check.results.create-cmd-flags)
+      - name: cluster-name
+        value: $(params.cluster-name)
+      - name: provision-cluster
+        value: $(params.provision-cluster)
+      - name: cluster-lifespan
+        value: $(params.cluster-lifespan)
+    runAfter:
+      - parameter-sanity-check
+    taskRef:
+      kind: Task
+      name: provision-osd-aws
+    workspaces:
+      - name: shared-workspace
+  - name: provision-osd-gcp
+    when:
+      - input: "$(params.cluster-type)"
+        operator: in
+        values: ['osd-gcp']
+    params:
+      - name: gcp-credentials
+        value: $(tasks.parameter-sanity-check.results.provider-credentials)
+      - name: create-cmd-flags
+        value: $(tasks.parameter-sanity-check.results.create-cmd-flags)
+      - name: cluster-name
+        value: $(params.cluster-name)
+      - name: provision-cluster
+        value: $(params.provision-cluster)
+      - name: cluster-lifespan
+        value: $(params.cluster-lifespan)
+    runAfter:
+      - parameter-sanity-check
+    taskRef:
+      kind: Task
+      name: provision-osd-gcp
+    workspaces:
+      - name: shared-workspace
+  - name: provision-rosa
+    when:
+      - input: "$(params.cluster-type)"
+        operator: in
+        values: ['rosa']
+    params:
+      - name: aws-credentials
+        value: $(tasks.parameter-sanity-check.results.provider-credentials)
+      - name: create-cmd-flags
+        value: $(tasks.parameter-sanity-check.results.create-cmd-flags)
+      - name: cluster-name
+        value: $(params.cluster-name)
+      - name: region
+        value: $(params.region)
+      - name: provision-cluster
+        value: $(params.provision-cluster)
+      - name: cluster-lifespan
+        value: $(params.cluster-lifespan)
+    runAfter:
+      - rosa-login
+    taskRef:
+      kind: Task
+      name: provision-rosa
+    workspaces:
+      - name: shared-workspace
+  - name: get-cluster-id
+    params:
+      - name: cluster-name
+        value: $(params.cluster-name)
+    runAfter:
+      - provision-osd-aws
+      - provision-osd-gcp
+      - provision-rosa
+    taskRef:
+      kind: Task
+      name: get-cluster-id
+    workspaces:
+      - name: shared-workspace
+  - name: wait-till-osd-is-ready
+    params:
+      - name: cluster-id
+        value: $(tasks.get-cluster-id.results.cluster-id)
+    runAfter:
+      - get-cluster-id
+    taskRef:
+      kind: Task
+      name: wait-till-osd-is-ready
+    workspaces:
+      - name: shared-workspace
+  - name: get-osd-credentials
+    params:
+      - name: cluster-id
+        value: $(tasks.get-cluster-id.results.cluster-id)
+      - name: provision-cluster
+        value: $(params.provision-cluster)
+    runAfter:
+      - wait-till-osd-is-ready
+    taskRef:
+      kind: Task
+      name: get-osd-credentials
+    workspaces:
+      - name: shared-workspace
+  - name: wait-for-valid-certificates
+    params:
+      - name: console-url
+        value: $(tasks.get-osd-credentials.results.console-url)
+      - name: api-url
+        value: $(tasks.get-osd-credentials.results.kube-api)
+    runAfter:
+      - get-osd-credentials
+    taskRef:
+      kind: Task
+      name: wait-for-valid-certificates
+    workspaces:
+      - name: shared-workspace
+# ---- MCP Gateway Setup & Tests ----
+  - name: kubectl-login
+    params:
+    - name: kube-api
+      value: $(tasks.get-osd-credentials.results.kube-api)
+    - name: testsuite-image
+      value: quay.io/kuadrant/testsuite-pipelines-tools:latest
+    - name: cluster-credentials
+      value: $(tasks.get-osd-credentials.results.credentials-secret)
+    runAfter:
+    - wait-for-valid-certificates
+    taskRef:
+      kind: Task
+      name: kubectl-login
+    workspaces:
+    - name: shared-workspace
+  - name: helm-deploy
+    retries: 3
+    runAfter:
+    - kubectl-login
+    when:
+      - input: "$(params.install-tools)-$(params.install-kuadrant)"
+        operator: in
+        values: ["true-true", "true-false", "false-true"]
+    taskRef:
+      kind: Task
+      name: helm-deploy
+    params:
+      - name: kubeconfig-path
+        value: $(tasks.kubectl-login.results.kubeconfig-path)
+      - name: istio-provider
+        value: $(params.istio-provider)
+      - name: gateway-crd
+        value: $(params.gateway-crd)
+      - name: additional-helm-tools-flags
+        value: $(params.additional-helm-tools-flags)
+      - name: install-tools
+        value: $(params.install-tools)
+      - name: install-kuadrant
+        value: $(params.install-kuadrant)
+      - name: index-image
+        value: $(params.kuadrant-index-image)
+      - name: channel
+        value: $(params.kuadrant-channel)
+      - name: operator-name
+        value: $(params.kuadrant-operator-name)
+      - name: additional-helm-flags
+        value: $(params.kuadrant-additional-helm-flags)
+      - name: additional-manifests-secret
+        value: $(params.additional-manifests-secret)
+      - name: extensions-image
+        value: $(params.extensions-image)
+    workspaces:
+    - name: shared-workspace
+  - name: clone-mcp-gateway-repo
+    runAfter:
+    - kubectl-login
+    - helm-deploy
+    taskRef:
+      kind: Task
+      name: clone-repo
+    params:
+      - name: repo-url
+        value: $(params.mcp-gateway-repo-url)
+      - name: revision
+        value: $(params.mcp-gateway-revision)
+      - name: dest-dir
+        value: mcp-gateway
+    workspaces:
+    - name: shared-workspace
+  - name: import-keycloak-realm
+    runAfter:
+    - clone-mcp-gateway-repo
+    taskRef:
+      kind: Task
+      name: import-keycloak-realm
+    params:
+      - name: kubeconfig-path
+        value: $(tasks.kubectl-login.results.kubeconfig-path)
+    workspaces:
+    - name: shared-workspace
+  - name: install-mcp-gateway
+    runAfter:
+    - import-keycloak-realm
+    when:
+      - input: $(params.deploy-mcp-gateway)
+        operator: in
+        values: ["true"]
+    taskRef:
+      kind: Task
+      name: install-mcp-gateway
+    params:
+      - name: kubeconfig-path
+        value: $(tasks.kubectl-login.results.kubeconfig-path)
+      - name: catalog-image
+        value: $(params.mcp-controller-catalog-image)
+      - name: mcp-gateway-namespace
+        value: $(params.mcp-gateway-namespace)
+      - name: istio-provider
+        value: $(params.istio-provider)
+      - name: channel
+        value: $(params.channel)
+      - name: mcp-gateway-chart-version
+        value: $(params.mcp-gateway-chart-version)
+      - name: install-productized-version
+        value: $(params.install-productized-version)
+      - name: install-service-mesh
+        value: $(params.install-service-mesh)
+    workspaces:
+    - name: shared-workspace
+  - name: cleanup-before-tests
+    runAfter:
+    - install-mcp-gateway
+    when:
+      - input: "$(params.run-e2e-tests)-$(params.run-auth-e2e-tests)-$(params.run-conformance-tests)"
+        operator: notin
+        values: ["false-false-false"]
+    taskRef:
+      kind: Task
+      name: cleanup-before-tests
+    params:
+      - name: kubeconfig-path
+        value: $(tasks.kubectl-login.results.kubeconfig-path)
+      - name: mcp-gateway-namespace
+        value: $(params.mcp-gateway-namespace)
+    workspaces:
+    - name: shared-workspace
+  - name: run-e2e-tests
+    onError: continue
+    runAfter:
+    - cleanup-before-tests
+    taskRef:
+      kind: Task
+      name: run-e2e-tests
+    params:
+      - name: kubeconfig-path
+        value: $(tasks.kubectl-login.results.kubeconfig-path)
+      - name: mcp-gateway-namespace
+        value: $(params.mcp-gateway-namespace)
+      - name: istio-provider
+        value: $(params.istio-provider)
+      - name: run-tests
+        value: $(params.run-e2e-tests)
+      - name: github-pat-secret
+        value: $(params.github-pat-secret)
+    workspaces:
+    - name: shared-workspace
+  - name: run-auth-e2e-tests
+    onError: continue
+    runAfter:
+    - run-e2e-tests
+    taskRef:
+      kind: Task
+      name: run-auth-e2e-tests
+    params:
+      - name: kubeconfig-path
+        value: $(tasks.kubectl-login.results.kubeconfig-path)
+      - name: mcp-gateway-namespace
+        value: $(params.mcp-gateway-namespace)
+      - name: istio-provider
+        value: $(params.istio-provider)
+      - name: run-tests
+        value: $(params.run-auth-e2e-tests)
+    workspaces:
+    - name: shared-workspace
+  - name: after-e2e-setup
+    onError: continue
+    runAfter:
+    - run-auth-e2e-tests
+    taskRef:
+      kind: Task
+      name: after-e2e-setup
+    params:
+      - name: kubeconfig-path
+        value: $(tasks.kubectl-login.results.kubeconfig-path)
+      - name: mcp-gateway-namespace
+        value: $(params.mcp-gateway-namespace)
+      - name: istio-provider
+        value: $(params.istio-provider)
+    workspaces:
+    - name: shared-workspace
+  - name: run-conformance-tests
+    onError: continue
+    runAfter:
+    - after-e2e-setup
+    when:
+      - input: $(params.run-conformance-tests)
+        operator: in
+        values: ["true"]
+    taskRef:
+      kind: Task
+      name: run-conformance-tests
+    params:
+      - name: kubeconfig-path
+        value: $(tasks.kubectl-login.results.kubeconfig-path)
+      - name: conformance-version
+        value: $(params.conformance-version)
+    workspaces:
+    - name: shared-workspace
+# ---- OSD Cluster Cleanup ----
+  - name: delete-osd
+    when:
+      - input: $(params.cleanup)
+        operator: in
+        values: ["true"]
+      - input: $(params.cluster-type)
+        operator: in
+        values: ["osd-aws", "osd-gcp"]
+    params:
+      - name: cluster-id
+        value: $(tasks.get-cluster-id.results.cluster-id)
+    runAfter:
+      - run-conformance-tests
+    taskRef:
+      kind: Task
+      name: delete-osd
+    workspaces:
+      - name: shared-workspace
+  - name: delete-rosa
+    when:
+      - input: $(params.cleanup)
+        operator: in
+        values: ["true"]
+      - input: $(params.cluster-type)
+        operator: in
+        values: ["rosa"]
+    params:
+      - name: cluster-id
+        value: $(tasks.get-cluster-id.results.cluster-id)
+      - name: region
+        value: $(params.region)
+      - name: aws-credentials
+        value: $(tasks.parameter-sanity-check.results.provider-credentials)
+    runAfter:
+      - run-conformance-tests
+    taskRef:
+      kind: Task
+      name: delete-rosa
+    workspaces:
+      - name: shared-workspace
+  - name: cluster-secret-cleanup
+    when:
+      - input: $(params.cleanup)
+        operator: in
+        values: ["true"]
+    params:
+      - name: cluster-name
+        value: $(params.cluster-name)
+    runAfter:
+      - run-conformance-tests
+    taskRef:
+      kind: Task
+      name: cluster-secret-cleanup
