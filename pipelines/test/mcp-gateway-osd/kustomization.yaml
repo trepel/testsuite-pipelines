@@ -11,6 +11,7 @@ components:
   - ../../../tasks/deploy/
   - ../../../tasks/infra/
   - ../../../tasks/misc/
+  - ../../../tasks/test/
   - ../../../tasks/test/mcp/
 
 resources:

@@ -75,6 +75,9 @@ spec:
 
         cd "$(workspaces.shared-workspace.path)/mcp-gateway"
 
+        # Install ginkgo test dependencies
+        make test-e2e-deps
+
         # deploy and register test MCP servers
         oc apply -k config/test-servers/
         # patch imagePullPolicy to pull the image from remote registry
@@ -299,7 +302,20 @@ spec:
         EOF
 
         if [ "$(params.run-tests)" = "true" ]; then
-          make test-e2e-run
+          GINKGO_RC=0
+          ./bin/ginkgo -v --tags=e2e --timeout="$E2E_TIMEOUT" --procs="$E2E_PROCS" --junit-report="junit-e2e-report.xml" --output-dir="$(workspaces.shared-workspace.path)" ./tests/e2e || GINKGO_RC=$?
+          REPORT="$(workspaces.shared-workspace.path)/junit-e2e-report.xml"
+          # Clean up Ginkgo JUnit XML for ReportPortal:
+          #  - Remove BeforeSuite/AfterSuite entries (not real tests, one per parallel proc)
+          #  - Remove <properties> block (Ginkgo metadata that causes RP to silently fail suite creation)
+          #  - Rename testsuite/classname so tests appear grouped under 'e2e' in RP
+          if [ -f "$REPORT" ]; then
+            sed -i -e '/<testcase name="\[Synchronized\(Before\|After\)Suite\]"/,/<\/testcase>/d' \
+                   -e '/<properties>/,/<\/properties>/d' \
+                   -e 's/<testsuite name="[^"]*"/<testsuite name="e2e"/' \
+                   -e 's/classname="[^"]*"/classname="tests.e2e"/g' "$REPORT"
+          fi
+          exit $GINKGO_RC
         else
           echo "Skipping e2e test execution (run-tests=false), but setup completed successfully"
         fi

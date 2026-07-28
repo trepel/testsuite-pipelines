@@ -10,6 +10,7 @@ components:
   - ../../../tasks/login/
   - ../../../tasks/deploy/
   - ../../../tasks/misc/
+  - ../../../tasks/test/
   - ../../../tasks/test/mcp/
 
 resources:

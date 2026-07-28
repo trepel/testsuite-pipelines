@@ -66,12 +66,15 @@ spec:
           tools-call-with-progress
         )
 
+        CONFORMANCE_RESULTS="$(workspaces.shared-workspace.path)/conformance-results"
+
         FAILED_SCENARIOS=()
         for scenario in "${SCENARIOS[@]}"; do
           echo "=== Running scenario: $scenario ==="
           if ! npx @modelcontextprotocol/conformance@${CONFORMANCE_VERSION} server \
             --url "${MCP_GATEWAY_URL}" \
             --scenario "$scenario" \
+            --output-dir "$CONFORMANCE_RESULTS" \
             --verbose; then
             echo "FAILED: $scenario"
             FAILED_SCENARIOS+=("$scenario")
@@ -80,6 +83,50 @@ spec:
           fi
           sleep 20
         done
+
+        # Generate JUnit XML report from conformance check results
+        JUNIT_REPORT="$(workspaces.shared-workspace.path)/junit-conformance-report.xml"
+        TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%S)"
+
+        if ! find "$CONFORMANCE_RESULTS" -name 'checks.json' 2>/dev/null | grep -q .; then
+          echo "ERROR: No checks.json files found under $CONFORMANCE_RESULTS"
+          exit 1
+        fi
+
+        # Merge all checks.json files into a single JSON array
+        echo "=== Generating JUnit XML report from checks.json files ==="
+        MERGED_CHECKS=$(find "$CONFORMANCE_RESULTS" -name 'checks.json' -print0 | xargs -0 jq -s 'add')
+
+        # Count totals for the testsuite element
+        TOTAL=$(echo "$MERGED_CHECKS" | jq 'length')
+        FAILURES=$(echo "$MERGED_CHECKS" | jq '[.[] | select(.status == "FAILURE")] | length')
+        SKIPPED=$(echo "$MERGED_CHECKS" | jq '[.[] | select(.status == "SKIPPED")] | length')
+
+        # Generate JUnit XML header
+        {
+          echo '<?xml version="1.0" encoding="UTF-8"?>'
+          echo '<testsuites>'
+          echo "  <testsuite name=\"mcp-conformance\" tests=\"${TOTAL}\" failures=\"${FAILURES}\" skipped=\"${SKIPPED}\" time=\"0\" timestamp=\"${TIMESTAMP}\">"
+
+          # Generate a <testcase> element for each check result
+          echo "$MERGED_CHECKS" | jq -r '
+            def esc: gsub("&";"&amp;") | gsub("<";"&lt;") | gsub(">";"&gt;") | gsub("\"";"&quot;");
+            .[] |
+            "    <testcase name=\"\(.id | esc)\" classname=\"tests.conformance\" time=\"0\">" +
+            (if .status == "FAILURE" then
+              "\n      <failure message=\"\((.errorMessage // "check failed") | esc)\">" +
+              (if .logs then (.logs | join("\n") | esc) else "" end) +
+              "</failure>"
+            elif .status == "SKIPPED" then
+              "\n      <skipped/>"
+            else "" end) +
+            "\n    </testcase>"
+          '
+
+          echo '  </testsuite>'
+          echo '</testsuites>'
+        } > "$JUNIT_REPORT"
+        echo "JUnit XML report written to $JUNIT_REPORT"
 
         if [ ${#FAILED_SCENARIOS[@]} -gt 0 ]; then
           echo ""

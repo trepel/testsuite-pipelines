@@ -125,6 +125,31 @@ spec:
     name: additional-manifests-secret
     type: string
     default: values-additional-manifests
+# Report Portal
+  - description: Prefix of the launch name saved in Report Portal (nightly, pipeline, etc.)
+    name: launch-name
+    type: string
+    default: pipeline
+  - description: Optional launch description for Report Portal
+    name: launch-description
+    type: string
+    default: "MCP Gateway Testing"
+  - description: Report Portal Project to store test results (e.g. testsuite, nightly-testsuite)
+    name: rp-project
+    type: string
+    default: mcp-gateway
+  - description: Upload test results to Report Portal (true/false)
+    name: upload-results
+    type: string
+    default: "false"
+  - description: rptool image for uploading results to Report Portal
+    name: rptool-image
+    type: string
+    default: "quay.io/kuadrant/rptool:unstable"
+  - description: Used as launch name suffix in Report Portal
+    name: make-target
+    type: string
+    default: mcp-gateway
 # Tests
   - description: Run MCP e2e tests (true/false)
     name: run-e2e-tests
@@ -586,3 +611,26 @@ spec:
     taskRef:
       kind: Task
       name: cluster-secret-cleanup
+  finally:
+  - name: rptool-upload
+    when:
+      - input: $(params.upload-results)
+        operator: in
+        values: ["true"]
+    params:
+      - name: launch-name
+        value: $(params.launch-name)
+      - name: launch-description
+        value: $(params.launch-description)
+      - name: rptool-image
+        value: $(params.rptool-image)
+      - name: make-target
+        value: $(params.make-target)
+      - name: rp-project
+        value: $(params.rp-project)
+    taskRef:
+      kind: Task
+      name: rptool-upload
+    workspaces:
+      - name: shared-workspace
+        workspace: shared-workspace
