@@ -75,6 +75,97 @@ spec:
 
         cd "$(workspaces.shared-workspace.path)/mcp-gateway"
 
+        # Add protocol-2026 listener
+        if ! kubectl get gateway mcp-gateway -n gateway-system -o jsonpath='{.spec.listeners[*].name}' | grep -qw "protocol-2026"; then
+          kubectl patch gateway mcp-gateway -n gateway-system --type=json -p "[{
+            \"op\": \"add\",
+            \"path\": \"/spec/listeners/-\",
+            \"value\": {
+              \"name\": \"protocol-2026\",
+              \"hostname\": \"*.protocol-2026.$E2E_DOMAIN\",
+              \"port\": 8082,
+              \"protocol\": \"HTTP\",
+              \"allowedRoutes\": {\"namespaces\": {\"from\": \"All\"}}
+            }
+          }]"
+        else
+          echo "Listener protocol-2026 already exists, skipping"
+        fi
+
+        # create OpenShift Route for protocol-2026 Listener
+        kubectl apply -f - <<EOF
+          apiVersion: route.openshift.io/v1
+          kind: Route
+          metadata:
+            name: protocol-2026
+            namespace: gateway-system
+          spec:
+            host: mcp.protocol-2026.$E2E_DOMAIN
+            to:
+              kind: Service
+              name: mcp-gateway-${GATEWAY_CLASS_NAME}
+            port:
+              targetPort: protocol-2026
+            tls:
+              termination: edge
+              insecureEdgeTerminationPolicy: Redirect
+        EOF
+
+        # Add tool-discovery listener
+        if ! kubectl get gateway mcp-gateway -n gateway-system -o jsonpath='{.spec.listeners[*].name}' | grep -qw "tool-discovery"; then
+          kubectl patch gateway mcp-gateway -n gateway-system --type=json -p "[{
+            \"op\": \"add\",
+            \"path\": \"/spec/listeners/-\",
+            \"value\": {
+              \"name\": \"tool-discovery\",
+              \"hostname\": \"*.tool-discovery.$E2E_DOMAIN\",
+              \"port\": 8080,
+              \"protocol\": \"HTTP\",
+              \"allowedRoutes\": {\"namespaces\": {\"from\": \"All\"}}
+            }
+          }]"
+        else
+          echo "Listener tool-discovery already exists, skipping"
+        fi
+
+        # create OpenShift Route for tool-discovery Listener
+        kubectl apply -f - <<EOF
+          apiVersion: route.openshift.io/v1
+          kind: Route
+          metadata:
+            name: tool-discovery
+            namespace: gateway-system
+          spec:
+            host: mcp.tool-discovery.$E2E_DOMAIN
+            to:
+              kind: Service
+              name: mcp-gateway-${GATEWAY_CLASS_NAME}
+            port:
+              targetPort: mcps
+            tls:
+              termination: edge
+              insecureEdgeTerminationPolicy: Redirect
+        EOF
+
+        # Add mcps-https listener
+        if ! kubectl get gateway mcp-gateway -n gateway-system -o jsonpath='{.spec.listeners[*].name}' | grep -qw "mcps-https"; then
+          kubectl patch gateway mcp-gateway -n gateway-system --type=json -p='[
+              {"op": "add", "path": "/spec/listeners/-", "value": {
+                "name": "mcps-https",
+                "port": 8080,
+                "protocol": "HTTP",
+                "hostname": "*.mcp-tls.local",
+                "allowedRoutes": {
+                  "namespaces": {
+                    "from": "All"
+                  }
+                }
+              }}
+          ]'
+        else
+          echo "Listener mcps-https already exists, skipping"
+        fi
+
         # Install ginkgo test dependencies
         make test-e2e-deps
 
@@ -208,36 +299,6 @@ spec:
           wildcardPolicy: None
         EOF
 
-        kubectl apply -f config/test-servers/tls-server-cert-manager.yaml
-        kubectl wait --for=condition=Ready certificate/private-ca -n cert-manager --timeout=60s
-        kubectl wait --for=condition=Ready certificate/tls-test-server-cert -n mcp-test --timeout=60s
-        kubectl apply -f config/test-servers/tls-server-deployment.yaml
-        kubectl patch deployment mcp-tls-server -n mcp-test --type=json -p='[
-            {"op": "replace", "path": "/spec/template/spec/containers/0/imagePullPolicy", "value": "Always"},
-            {"op": "remove", "path": "/spec/template/spec/securityContext/runAsUser"},
-            {"op": "remove", "path": "/spec/template/spec/securityContext/runAsGroup"}
-        ]'
-        kubectl wait --for=condition=available --timeout=120s deployment/mcp-tls-server -n mcp-test
-
-        # Add mcps-https listener if it doesn't already exist
-        if ! kubectl get gateway mcp-gateway -n gateway-system -o jsonpath='{.spec.listeners[*].name}' | grep -q "mcps-https"; then
-          kubectl patch gateway mcp-gateway -n gateway-system --type=json -p='[
-              {"op": "add", "path": "/spec/listeners/-", "value": {
-                "name": "mcps-https",
-                "port": 8080,
-                "protocol": "HTTP",
-                "hostname": "*.mcp-tls.local",
-                "allowedRoutes": {
-                  "namespaces": {
-                    "from": "All"
-                  }
-                }
-              }}
-          ]'
-        else
-          echo "Listener mcps-https already exists, skipping"
-        fi
-
         # CA bundle that Router/Broken must trust to be able to communicate with Gateway via HTTPS
         oc apply -n $MCP_GATEWAY_NAMESPACE -f - <<EOF
           apiVersion: v1
@@ -266,40 +327,17 @@ spec:
         # patch server3 to disable DNS rebinding protection, see https://github.com/modelcontextprotocol/python-sdk/issues/1798
         kubectl -n mcp-test set env deployment/mcp-test-server3 FASTMCP_HTTP_HOST_ORIGIN_PROTECTION=false
 
-        if ! kubectl get gateway mcp-gateway -n gateway-system -o jsonpath='{.spec.listeners[*].name}' | grep -q "tool-discovery"; then
-          kubectl patch gateway mcp-gateway -n gateway-system --type=json -p "[{
-            \"op\": \"add\",
-            \"path\": \"/spec/listeners/-\",
-            \"value\": {
-              \"name\": \"tool-discovery\",
-              \"hostname\": \"*.tool-discovery.$E2E_DOMAIN\",
-              \"port\": 8080,
-              \"protocol\": \"HTTP\",
-              \"allowedRoutes\": {\"namespaces\": {\"from\": \"All\"}}
-            }
-          }]"
-        else
-          echo "Listener tool-discovery already exists, skipping"
-        fi
-
-        # create OpenShift Route for tool-discovery Listener
-        kubectl apply -f - <<EOF
-          apiVersion: route.openshift.io/v1
-          kind: Route
-          metadata:
-            name: tool-discovery
-            namespace: gateway-system
-          spec:
-            host: mcp.tool-discovery.$E2E_DOMAIN
-            to:
-              kind: Service
-              name: mcp-gateway-${GATEWAY_CLASS_NAME}
-            port:
-              targetPort: mcps
-            tls:
-              termination: edge
-              insecureEdgeTerminationPolicy: Redirect
-        EOF
+        # Deploy MCP TLS Server and related certificates
+        kubectl apply -f config/test-servers/tls-server-cert-manager.yaml
+        kubectl wait --for=condition=Ready certificate/private-ca -n cert-manager --timeout=60s
+        kubectl wait --for=condition=Ready certificate/tls-test-server-cert -n mcp-test --timeout=60s
+        kubectl apply -f config/test-servers/tls-server-deployment.yaml
+        kubectl patch deployment mcp-tls-server -n mcp-test --type=json -p='[
+            {"op": "replace", "path": "/spec/template/spec/containers/0/imagePullPolicy", "value": "Always"},
+            {"op": "remove", "path": "/spec/template/spec/securityContext/runAsUser"},
+            {"op": "remove", "path": "/spec/template/spec/securityContext/runAsGroup"}
+        ]'
+        kubectl wait --for=condition=available --timeout=120s deployment/mcp-tls-server -n mcp-test
 
         if [ "$(params.run-tests)" = "true" ]; then
           GINKGO_RC=0
