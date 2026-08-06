@@ -227,7 +227,7 @@ spec:
         - name: pytest-flags
           value: $(params.pytest-flags)
         - name: additional-env
-          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path)'
+          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster__kubeconfig_path=$(tasks.kubectl-login.results.kubeconfig-path) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path)'
         - name: kubeconfig-path
           value: $(tasks.kubectl-login.results.kubeconfig-path)
         - name: cluster-credentials
@@ -306,7 +306,7 @@ spec:
         - name: pytest-flags
           value: "$(params.pytest-flags) --junitxml=$(workspaces.shared-workspace.path)/junit-multicluster-gcp.xml -o junit_suite_name=multicluster-gcp"
         - name: additional-env
-          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path) KUADRANT_CONTROL_PLANE__provider_secret=gcp-credentials KUADRANT_DNS__dns_server__geo_code=us-central1 KUADRANT_DNS__dns_server2__geo_code=europe-central2'
+          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster__kubeconfig_path=$(tasks.kubectl-login.results.kubeconfig-path) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path) KUADRANT_CONTROL_PLANE__provider_secret=gcp-credentials KUADRANT_DNS__dns_server__geo_code=us-central1 KUADRANT_DNS__dns_server2__geo_code=europe-central2'
         - name: kubeconfig-path
           value: $(tasks.kubectl-login.results.kubeconfig-path)
         - name: cluster-credentials
@@ -333,7 +333,7 @@ spec:
         - name: pytest-flags
           value: "$(params.pytest-flags) --junitxml=$(workspaces.shared-workspace.path)/junit-multicluster-azure.xml -o junit_suite_name=multicluster-azure"
         - name: additional-env
-          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path) KUADRANT_CONTROL_PLANE__provider_secret=azure-credentials KUADRANT_DNS__dns_server__geo_code=GEO-NA KUADRANT_DNS__dns_server2__geo_code=GEO-EU'
+          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster__kubeconfig_path=$(tasks.kubectl-login.results.kubeconfig-path) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path) KUADRANT_CONTROL_PLANE__provider_secret=azure-credentials KUADRANT_DNS__dns_server__geo_code=GEO-NA KUADRANT_DNS__dns_server2__geo_code=GEO-EU'
         - name: kubeconfig-path
           value: $(tasks.kubectl-login.results.kubeconfig-path)
         - name: cluster-credentials
@@ -359,7 +359,7 @@ spec:
         - name: settings-cm
           value: $(params.settings-cm)
         - name: additional-env
-          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path)'
+          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster__kubeconfig_path=$(tasks.kubectl-login.results.kubeconfig-path) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path)'
         - name: kubeconfig-path
           value: $(tasks.kubectl-login.results.kubeconfig-path)
         - name: cluster-credentials
