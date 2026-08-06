@@ -237,7 +237,7 @@ spec:
         - name: pytest-flags
           value: $(params.pytest-flags)
         - name: additional-env
-          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-third-cluster.results.kubeconfig-path)'
+          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-third-cluster.results.kubeconfig-path)'
         - name: kubeconfig-path
           value: $(tasks.kubectl-login-second-cluster.results.kubeconfig-path)
         - name: cluster-credentials
@@ -288,7 +288,7 @@ spec:
         - name: settings-cm
           value: $(params.settings-cm)
         - name: additional-env
-          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-third-cluster.results.kubeconfig-path)'
+          value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-third-cluster.results.kubeconfig-path)'
         - name: kubeconfig-path
           value: $(tasks.kubectl-login-second-cluster.results.kubeconfig-path)
         - name: cluster-credentials
