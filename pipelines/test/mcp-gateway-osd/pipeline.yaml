@@ -117,10 +117,6 @@ spec:
     name: kuadrant-additional-helm-flags
     type: string
     default: ""
-  - description: Extensions image to overwrite default one.
-    name: extensions-image
-    type: string
-    default: "quay.io/kuadrant/internal-extensions:latest"
   - description: Secret name containing additional Helm values manifest (additionalManifests.yaml)
     name: additional-manifests-secret
     type: string
@@ -408,8 +404,6 @@ spec:
         value: $(params.kuadrant-additional-helm-flags)
       - name: additional-manifests-secret
         value: $(params.additional-manifests-secret)
-      - name: extensions-image
-        value: $(params.extensions-image)
     workspaces:
     - name: shared-workspace
   - name: clone-mcp-gateway-repo
