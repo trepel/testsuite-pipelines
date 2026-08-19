@@ -147,6 +147,42 @@ spec:
               insecureEdgeTerminationPolicy: Redirect
         EOF
 
+        # Add resources-federation listener
+        if ! kubectl get gateway mcp-gateway -n gateway-system -o jsonpath='{.spec.listeners[*].name}' | grep -qw "resources-federation"; then
+          kubectl patch gateway mcp-gateway -n gateway-system --type=json -p "[{
+            \"op\": \"add\",
+            \"path\": \"/spec/listeners/-\",
+            \"value\": {
+              \"name\": \"resources-federation\",
+              \"hostname\": \"*.resources-federation.$E2E_DOMAIN\",
+              \"port\": 8083,
+              \"protocol\": \"HTTP\",
+              \"allowedRoutes\": {\"namespaces\": {\"from\": \"All\"}}
+            }
+          }]"
+        else
+          echo "Listener resources-federation already exists, skipping"
+        fi
+
+        # create OpenShift Route for resources-federation Listener
+        kubectl apply -f - <<EOF
+          apiVersion: route.openshift.io/v1
+          kind: Route
+          metadata:
+            name: resources-federation
+            namespace: gateway-system
+          spec:
+            host: mcp.resources-federation.$E2E_DOMAIN
+            to:
+              kind: Service
+              name: mcp-gateway-${GATEWAY_CLASS_NAME}
+            port:
+              targetPort: resources-federation
+            tls:
+              termination: edge
+              insecureEdgeTerminationPolicy: Redirect
+        EOF
+
         # Add mcps-https listener
         if ! kubectl get gateway mcp-gateway -n gateway-system -o jsonpath='{.spec.listeners[*].name}' | grep -qw "mcps-https"; then
           kubectl patch gateway mcp-gateway -n gateway-system --type=json -p='[
