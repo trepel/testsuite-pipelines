@@ -116,7 +116,7 @@ spec:
 
         # Create MCPGatewayExtension
         kubectl apply -n $(params.mcp-gateway-namespace) -f - <<EOF
-        apiVersion: mcp.kuadrant.io/v1alpha1
+        apiVersion: mcp.kuadrant.io/v1
         kind: MCPGatewayExtension
         metadata:
           name: mcp-gateway-extension
