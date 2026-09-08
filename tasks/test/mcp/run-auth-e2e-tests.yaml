@@ -261,14 +261,41 @@ spec:
           ./bin/ginkgo -v --tags=e2e --timeout="$E2E_TIMEOUT" --procs="$E2E_PROCS" --junit-report="junit-e2e-auth-report.xml" --output-dir="$(workspaces.shared-workspace.path)" --focus="AuthPolicy" ./tests/e2e || GINKGO_RC=$?
           REPORT="$(workspaces.shared-workspace.path)/junit-e2e-auth-report.xml"
           # Clean up Ginkgo JUnit XML for ReportPortal:
-          #  - Remove BeforeSuite/AfterSuite entries (not real tests, one per parallel proc)
+          #  - Keep only tests matching --focus=AuthPolicy (also removes suite setup/teardown)
+          #    Preserve all auth skips, including those caused by an earlier Ordered test failure.
           #  - Remove <properties> block (Ginkgo metadata that causes RP to silently fail suite creation)
           #  - Rename testsuite/classname so tests appear grouped under 'e2e-auth' in RP
+          #  - Recalculate counts after removing testcases
           if [ -f "$REPORT" ]; then
-            sed -i -e '/<testcase name="\[Synchronized\(Before\|After\)Suite\]"/,/<\/testcase>/d' \
-                   -e '/<properties>/,/<\/properties>/d' \
-                   -e 's/<testsuite name="[^"]*"/<testsuite name="e2e-auth"/' \
-                   -e 's/classname="[^"]*"/classname="tests.e2e.auth"/g' "$REPORT"
+            python3.11 - "$REPORT" <<'PY'
+        import sys
+        import xml.etree.ElementTree as ET
+
+        tree = ET.parse(sys.argv[1])
+        root = tree.getroot()
+        for suite in root.findall("testsuite"):
+            for testcase in suite.findall("testcase"):
+                if "AuthPolicy" not in testcase.get("name", ""):
+                    suite.remove(testcase)
+                else:
+                    testcase.set("classname", "tests.e2e.auth")
+            for properties in suite.findall("properties"):
+                suite.remove(properties)
+            suite.set("name", "e2e-auth")
+            skipped = suite.findall("testcase/skipped")
+            pending = sum(item.get("message") == "pending" for item in skipped)
+            suite.set("tests", str(len(suite.findall("testcase"))))
+            suite.set("failures", str(len(suite.findall("testcase/failure"))))
+            suite.set("errors", str(len(suite.findall("testcase/error"))))
+            suite.set("disabled", str(pending))
+            suite.set("skipped", str(len(skipped) - pending))
+
+        for attribute in ("tests", "failures", "errors"):
+            root.set(attribute, str(sum(int(suite.get(attribute)) for suite in root.findall("testsuite"))))
+        # Ginkgo's root disabled count includes both pending and skipped tests.
+        root.set("disabled", str(len(root.findall("testsuite/testcase/skipped"))))
+        tree.write(sys.argv[1], encoding="utf-8", xml_declaration=True)
+        PY
           fi
           exit $GINKGO_RC
         else
