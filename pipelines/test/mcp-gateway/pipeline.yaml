@@ -46,27 +46,23 @@ spec:
     name: mcp-gateway-chart-version
     type: string
     default: local
-  - description: MCP Controller catalog image
+  - description: MCP Gateway Operator catalog image. Ignored if install-productized-version is set to true or if MCP Gateway controller is bundled within Kuadrant/RHCL Operator
     name: mcp-controller-catalog-image
     type: string
     default: ghcr.io/kuadrant/mcp-controller-catalog:main
-  - description: If set to 'true' the 'mcp-controller-catalog-image' param is ignored. Official Catalog is used instead
+  - description: If set to 'true' the 'mcp-controller-catalog-image' param is ignored. Official Catalog is used instead. Ignored if MCP Gateway controller is bundled within Kuadrant/RHCL Operator
     name: install-productized-version
     type: string
     default: "false"
-  - description: If set to 'true' Service Mesh will be installed (true/false)
-    name: install-service-mesh
-    type: string
-    default: "true"
-  - description: MCP Gateway OLM channel. Can be 'preview' (tech preview, nightlies) or 'stable' (releases)
+  - description: MCP Gateway OLM channel. Can be 'preview' (tech preview, nightlies) or 'stable' (releases). Ignored if MCP Gateway controller is bundled within Kuadrant/RHCL Operator
     name: channel
     type: string
     default: preview
 # Kuadrant/RHCL
-  - description: Install Kuadrant alongside MCP Gateway (true/false)
+  - description: Install Kuadrant before MCP Gateway installation (true/false)
     name: install-kuadrant
     type: string
-    default: "false"
+    default: "true"
   - description: Kuadrant operator catalog image
     name: kuadrant-index-image
     type: string
@@ -247,8 +243,6 @@ spec:
         value: $(params.mcp-gateway-chart-version)
       - name: install-productized-version
         value: $(params.install-productized-version)
-      - name: install-service-mesh
-        value: $(params.install-service-mesh)
     workspaces:
     - name: shared-workspace
       workspace: shared-workspace

@@ -25,9 +25,6 @@ spec:
     - description: If set to 'true' the 'catalog-image' param is ignored and official Catalog is used instead
       name: install-productized-version
       type: string
-    - description: If set to 'true' Service Mesh will be installed
-      name: install-service-mesh
-      type: string
   steps:
     - name: install-mcp-gateway
       image: quay.io/kuadrant/testsuite-pipelines-tools:latest
@@ -38,11 +35,11 @@ spec:
         #!/usr/bin/env bash
         set -euo pipefail
 
-        # RHCL is installed automatically if installing MCP Gateway via OLM
+        # Kuadrant/RHCL and OSSMv3 should be installed earlier by helm-deploy Task
         export INSTALL_RHCL=false
+        export INSTALL_SERVICE_MESH=false
 
         export MCP_GATEWAY_NAMESPACE="$(params.mcp-gateway-namespace)"
-        export INSTALL_SERVICE_MESH="$(params.install-service-mesh)"
         export INSTALL_PRODUCTIZED_VERSION="$(params.install-productized-version)"
         export MCP_GATEWAY_VERSION="$(params.mcp-gateway-chart-version)"
         export CATALOG_IMG="$(params.catalog-image)"
