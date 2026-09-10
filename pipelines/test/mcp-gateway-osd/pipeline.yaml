@@ -93,19 +93,23 @@ spec:
     name: install-kuadrant
     type: string
     default: "true"
-  - description: Kuadrant operator catalog image
+  - description: Use today's Kuadrant nightly build with the preview channel and kuadrant-operator (true/false). Overrides kuadrant-index-image, chart-version, kuadrant-channel, and kuadrant-operator-name when install-kuadrant is true.
+    name: use-nightly-kuadrant
+    type: string
+    default: "false"
+  - description: Kuadrant operator catalog image. Ignored when use-nightly-kuadrant is true.
     name: kuadrant-index-image
     type: string
     default: ""
-  - description: Helm chart version to install. If set, INDEX-IMAGE IS IGNORED.
+  - description: Helm chart version to install. If set, INDEX-IMAGE IS IGNORED. Ignored when use-nightly-kuadrant is true.
     name: chart-version
     type: string
     default: ""
-  - description: Kuadrant OLM channel. Can be 'preview' (nightlies) or 'stable' (releases)
+  - description: Kuadrant OLM channel. Can be 'preview' (nightlies) or 'stable' (releases). Ignored when use-nightly-kuadrant is true.
     name: kuadrant-channel
     type: string
     default: stable
-  - description: Kuadrant operator name ('kuadrant-operator' or 'rhcl-operator')
+  - description: Kuadrant operator name ('kuadrant-operator' or 'rhcl-operator'). Ignored when use-nightly-kuadrant is true.
     name: kuadrant-operator-name
     type: string
     default: rhcl-operator
@@ -175,6 +179,27 @@ spec:
   workspaces:
   - name: shared-workspace
   tasks:
+  - name: nightly-image-date
+    when:
+      - input: "$(params.use-nightly-kuadrant)-$(params.install-kuadrant)"
+        operator: in
+        values: ["true-true"]
+    taskRef:
+      kind: Task
+      name: nightly-image-date
+  - name: check-image-existence
+    when:
+      - input: "$(params.use-nightly-kuadrant)-$(params.install-kuadrant)"
+        operator: in
+        values: ["true-true"]
+    params:
+      - name: index-image
+        value: $(tasks.nightly-image-date.results.nightly-image)
+    taskRef:
+      kind: Task
+      name: check-image-existence
+    runAfter:
+    - nightly-image-date
 # ---- OSD Cluster Provisioning ----
   - name: ocm-login
     params:
@@ -207,6 +232,7 @@ spec:
         value: $(params.provision-cluster)
     runAfter:
       - ocm-login
+      - check-image-existence
     taskRef:
       kind: Task
       name: parameter-sanity-check
@@ -378,6 +404,9 @@ spec:
       - input: "$(params.install-tools)-$(params.install-kuadrant)"
         operator: in
         values: ["true-true", "true-false", "false-true"]
+      - input: "$(params.use-nightly-kuadrant)-$(params.install-kuadrant)"
+        operator: notin
+        values: ["true-true"]
     taskRef:
       kind: Task
       name: helm-deploy
@@ -406,10 +435,48 @@ spec:
         value: $(params.additional-manifests-secret)
     workspaces:
     - name: shared-workspace
+  - name: helm-deploy-nightly
+    retries: 3
+    runAfter:
+    - kubectl-login
+    - check-image-existence
+    when:
+      - input: "$(params.use-nightly-kuadrant)-$(params.install-kuadrant)"
+        operator: in
+        values: ["true-true"]
+    taskRef:
+      kind: Task
+      name: helm-deploy
+    params:
+      - name: kubeconfig-path
+        value: $(tasks.kubectl-login.results.kubeconfig-path)
+      - name: istio-provider
+        value: $(params.istio-provider)
+      - name: additional-helm-tools-flags
+        value: $(params.additional-helm-tools-flags)
+      - name: install-tools
+        value: $(params.install-tools)
+      - name: install-kuadrant
+        value: $(params.install-kuadrant)
+      - name: index-image
+        value: $(tasks.nightly-image-date.results.nightly-image)
+      - name: chart-version
+        value: ""
+      - name: channel
+        value: preview
+      - name: operator-name
+        value: kuadrant-operator
+      - name: additional-helm-flags
+        value: $(params.kuadrant-additional-helm-flags)
+      - name: additional-manifests-secret
+        value: $(params.additional-manifests-secret)
+    workspaces:
+    - name: shared-workspace
   - name: clone-mcp-gateway-repo
     runAfter:
     - kubectl-login
     - helm-deploy
+    - helm-deploy-nightly
     taskRef:
       kind: Task
       name: clone-repo
