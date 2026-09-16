@@ -15,9 +15,11 @@ Pipelines are grouped by purpose in the `pipelines/` directory:
 - **`pipelines/test/`** - Pipelines executing testsuite tests
   - `testsuite/` - Basic test execution pipeline with a single make target
   - `nightly/` - Comprehensive nightly testing (runs kuadrant, authorino-standalone, multicluster, dnstls-gcp, dnstls-azure, and disruptive tests)
-  - `aro/`, `osd/`, `osd-upgrade/` - Cloud-specific test pipelines
+  - `aro/`, `osd/`, `osd-upgrade/`, `ocp-aws/` - Cloud-specific test pipelines
+  - `eks/` - AWS EKS pipeline that provisions the cluster, installs Kuadrant and tools, runs tests, then tears the cluster down
+  - `upgrade/` - Runs the testsuite before and after an OLM upgrade to the latest version
   - `release/` - Release candidate validation pipeline
-  - `mcp-gateway/` - MCP Gateway testing pipeline
+  - `mcp-gateway/`, `mcp-gateway-osd/` - MCP Gateway testing pipelines
 
 - **`pipelines/deploy/`** - Kuadrant deployment pipelines
   - `kuadrant-testsuite/` - Deploy Kuadrant via Helm for testing
@@ -35,16 +37,24 @@ Reusable Tekton tasks in the `tasks/` directory:
 
 - **`tasks/test/`** - Test execution tasks
   - `run-tests.yaml` - Core task that runs testsuite with configurable make targets
-  - `upload-results.yaml` - Uploads test results to ReportPortal
+  - `rptool-upload.yaml` - Uploads test results to ReportPortal
+  - `collect-info.yaml` - Runs the testsuite `collect` target to gather environment info
 
 - **`tasks/deploy/`** - Deployment tasks
   - `helm-deploy.yaml` - Deploy Kuadrant operators and instances via Helm (includes full cleanup/install cycle)
   - `check-image-existence.yaml` - Validate container images exist
   - `nightly-image-date.yaml` - Get nightly image timestamps
+  - `install-mcp-gateway.yaml` - Install MCP Gateway from a catalog image or Helm chart
+  - `import-keycloak-realm.yaml` - Import the Keycloak realm required by MCP Gateway tests
 
 - **`tasks/infra/`** - Infrastructure management tasks
-  - `provision-*.yaml` - Cluster provisioning for ARO, OSD (AWS/GCP), ROSA
+  - `provision-*.yaml` - Cluster provisioning for ARO, EKS, OCP-on-AWS, OSD (AWS/GCP), ROSA
   - `delete-*.yaml` - Cluster deletion tasks
+  - `setup-eks.yaml` - Install Kuadrant, its dependencies and testing tools on an EKS cluster
+  - `helm-uninstall.yaml` - Full Helm teardown of Kuadrant instances, operators and tools
+  - `upgrade-to-latest.yaml` - Upgrade Kuadrant/RHCL to the latest version via OLM
+  - `prepare-for-rhcl-rc-install.yaml` - Prepare a cluster for RHCL release candidate installation
+  - `ocm-login.yaml`, `rosa-login.yaml` - Authenticate to OCM directly or via the rosa CLI
   - `get-osd-credentials.yaml` - Extract cluster credentials
   - `operator-pod-restart.yaml` - Restart operator pods
   - `do-custom-updates.yaml` - Apply custom cluster updates

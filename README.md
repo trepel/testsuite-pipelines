@@ -78,6 +78,24 @@ kubectl create secret generic kua-azure-credentials --from-literal=APP_ID="xxx" 
 kubectl create secret generic aro-pull-secret --from-file=.dockerconfigjson=/path/to/your/auths.json  --type=kubernetes.io/dockerconfigjson -n ${PIPELINE_NAMESPACE}
 ```
 
+#### Resources required for the EKS pipeline
+- Opaque secret named `eks-aws-credentials` containing the AWS credentials of the IAM user that provisions and deletes the EKS cluster. E.g.
+```shell
+kubectl create secret generic eks-aws-credentials --from-literal=AWS_ACCESS_KEY_ID="xxx" --from-literal=AWS_SECRET_ACCESS_KEY="xxx" -n ${PIPELINE_NAMESPACE}
+```
+
+- Opaque secret named `additional-manifests-eks` containing cluster resources that the testsuite expects but that are not created by the Helm charts on EKS. Every key is applied with `kubectl apply` once Kuadrant is up, so each one must be a complete manifest. At minimum it should provide the DNS provider credentials used by DNSPolicy tests in the `kuadrant` namespace, plus the CA secret and the issuers used by TLSPolicy tests. E.g.
+```shell
+kubectl create secret generic additional-manifests-eks --from-file=aws-credentials.yaml --from-file=kuadrant-qe-ca.yaml --from-file=kuadrant-qe-issuer.yaml --from-file=letsencrypt-staging-issuer.yaml -n ${PIPELINE_NAMESPACE}
+```
+
+- Pull secret named `registry-redhat-io-pull-secret` containing `registry.redhat.io` credentials (a different name can be given via the `registry-redhat-io-pull-secret` parameter of the `setup-eks` task). Unlike OpenShift, EKS has no global pull secret, so this one is copied into every namespace that pulls the downstream cert-manager and OSSM images. E.g.
+```shell
+kubectl create secret generic registry-redhat-io-pull-secret --from-file=.dockerconfigjson=/path/to/your/auths.json --type=kubernetes.io/dockerconfigjson -n ${PIPELINE_NAMESPACE}
+```
+
+- The EKS pipeline runs the testsuite and uploads results, so it also requires the resources from the **test/** section above.
+
 #### Resources required for MCP Gateway pipeline
 - Opaque Secret containing a GitHub Personal Access Token for MCP e2e tests. The secret name must be specified via the `github-pat-secret` input parameter. E.g.
 ```shell
