@@ -163,9 +163,12 @@ spec:
 
         # modify HTTPRoute hostnames to match 'mcp-tls' HTTPS GW Listener
         for route in $(oc get httproute -n mcp-test -o jsonpath='{.items[*].metadata.name}'); do
-          oc get httproute "$route" -n mcp-test -o yaml | \
-          sed 's/\.mcp\.local/.apps.'"${BASE_DOMAIN}"'/g' | \
-          oc apply -f -
+          hostname=$(oc get httproute "$route" -n mcp-test -o jsonpath='{.spec.hostnames[0]}')
+          if [[ "$hostname" == *.mcp.local ]]; then
+            hostname="${hostname%.mcp.local}.apps.${BASE_DOMAIN}"
+            oc patch httproute "$route" -n mcp-test --type=merge \
+              -p "{\"spec\":{\"hostnames\":[\"${hostname}\"]}}"
+          fi
         done
 
         # wait for test MCP servers to get ready
