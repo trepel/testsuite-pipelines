@@ -409,11 +409,17 @@ spec:
         EOF
 
         # Copy the default ingress certificate secret to gateway-system namespace
-        kubectl get secret "$GATEWAY_TLS_SECRET" -n openshift-ingress -o yaml | \
-          sed 's/namespace: openshift-ingress/namespace: gateway-system/' | \
-          sed '/resourceVersion:/d' | \
-          sed '/uid:/d' | \
-          sed '/creationTimestamp:/d' | \
+        kubectl get secret "$GATEWAY_TLS_SECRET" -n openshift-ingress -o json | \
+          jq '{
+            apiVersion: "v1",
+            kind: "Secret",
+            metadata: {
+              name: .metadata.name,
+              namespace: "gateway-system"
+            },
+            type: .type,
+            data: .data
+          }' | \
           kubectl apply -f -
 
         # Create a secret based on trusted-ca-bundle ConfigMap

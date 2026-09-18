@@ -30,20 +30,18 @@ spec:
         # Populate env vars required for auth e2e tests
         export E2E_DOMAIN="apps.$(oc get dns cluster -o jsonpath='{.spec.baseDomain}')"
         export E2E_SCHEME=https
-        export E2E_HTTPS_REAL_CERTS=true
-        export E2E_PLATFORM=openshift
         export E2E_TIMEOUT=120m
-        export E2E_PROCS=4
 
         export MCP_GATEWAY_HOST="mcp.apps.$(oc get dns cluster -o jsonpath='{.spec.baseDomain}')"
         export GATEWAY_URL="${E2E_SCHEME}://${MCP_GATEWAY_HOST}/mcp"
-        export GATEWAY_CA_BUNDLE_SECRET=trusted-ca-bundle
-
-        export AUTH_GATEWAY_URL=$GATEWAY_URL
         export KEYCLOAK_URL="https://keycloak.$E2E_DOMAIN"
-        export KEYCLOAK_TOKEN_URL=$KEYCLOAK_URL/realms/mcp/protocol/openid-connect/token
 
         export MCP_GATEWAY_NAMESPACE="$(params.mcp-gateway-namespace)"
+        export MCP_AUTH_E2E=true
+        export MCP_AUTH_GATEWAY_URL="$GATEWAY_URL"
+        export MCP_AUTH_KEYCLOAK_TOKEN_URL="$KEYCLOAK_URL/realms/mcp/protocol/openid-connect/token"
+        export MCP_AUTH_NAMESPACE="$MCP_GATEWAY_NAMESPACE"
+        export MCP_AUTH_TEST_SERVER_NAMESPACE=mcp-test
 
         if [ "$(params.istio-provider)" = "ocp" ]; then
           export GATEWAY_CLASS_NAME=openshift-default
@@ -51,11 +49,60 @@ spec:
           export GATEWAY_CLASS_NAME=istio
         fi
 
-        export GATEWAY_TLS_SECRET="$(kubectl get ingresscontroller default -n openshift-ingress-operator -o jsonpath='{.spec.defaultCertificate.name}')"
-
-        # delete MCPGatewayExtension if exists, E2E tests create one on their own
+        # Restore the resources removed by the E2E testsuite's cleanup.
         if [ "$(params.run-tests)" = "true" ]; then
-          oc delete mcpgatewayextension --all -n "$MCP_GATEWAY_NAMESPACE" --wait=true --ignore-not-found=true
+          if ! kubectl get gateway mcp-gateway -n gateway-system -o json | jq -e '.spec.listeners[] | select(.name == "mcp-tls")' > /dev/null; then
+            GATEWAY_TLS_SECRET=$(kubectl get ingresscontroller default -n openshift-ingress-operator -o jsonpath='{.spec.defaultCertificate.name}')
+            kubectl patch gateway mcp-gateway -n gateway-system --type=json -p "$(jq -n \
+              --arg hostname "*.${E2E_DOMAIN}" --arg secret "$GATEWAY_TLS_SECRET" \
+              '[{op: "add", path: "/spec/listeners/-", value: {
+                name: "mcp-tls", port: 8443, protocol: "HTTPS", hostname: $hostname,
+                tls: {mode: "Terminate", certificateRefs: [{name: $secret, kind: "Secret"}]},
+                allowedRoutes: {namespaces: {from: "All"}}
+              }}]')"
+          fi
+          kubectl apply -f - <<EOF
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: trusted-ca-bundle
+          namespace: ${MCP_GATEWAY_NAMESPACE}
+          labels:
+            config.openshift.io/inject-trusted-cabundle: "true"
+        ---
+        apiVersion: gateway.networking.k8s.io/v1beta1
+        kind: ReferenceGrant
+        metadata:
+          name: mcp-gateway-extension-to-gateway
+          namespace: gateway-system
+        spec:
+          from:
+            - group: mcp.kuadrant.io
+              kind: MCPGatewayExtension
+              namespace: ${MCP_GATEWAY_NAMESPACE}
+          to:
+            - group: gateway.networking.k8s.io
+              kind: Gateway
+        ---
+        apiVersion: mcp.kuadrant.io/v1
+        kind: MCPGatewayExtension
+        metadata:
+          name: mcp-gateway-extension
+          namespace: ${MCP_GATEWAY_NAMESPACE}
+        spec:
+          caCertBundleRef:
+            name: trusted-ca-bundle
+            key: ca-bundle.crt
+          publicHost: ${MCP_GATEWAY_HOST}
+          targetRef:
+            group: gateway.networking.k8s.io
+            kind: Gateway
+            name: mcp-gateway
+            namespace: gateway-system
+            sectionName: mcp-tls
+        EOF
+          kubectl wait --for=condition=Ready mcpgatewayextension/mcp-gateway-extension -n "$MCP_GATEWAY_NAMESPACE" --timeout=10m
+          kubectl rollout status deployment/mcp-gateway -n "$MCP_GATEWAY_NAMESPACE" --timeout=5m
         fi
 
         # create mcp-test namespace if it does not exist
@@ -63,11 +110,18 @@ spec:
 
         cd "$(workspaces.shared-workspace.path)/mcp-gateway"
 
-        # Install ginkgo test dependencies
-        make test-e2e-deps
-
         # deploy and register test MCP servers
         oc apply -k config/test-servers/
+
+        for route in mcp-server1-route mcp-server2-route everything-server-route; do
+          hostname=$(oc get httproute "$route" -n mcp-test -o jsonpath='{.spec.hostnames[0]}')
+          if [[ "$hostname" == *.mcp.local ]]; then
+            hostname="${hostname%.mcp.local}.${E2E_DOMAIN}"
+            oc patch httproute "$route" -n mcp-test --type=merge \
+              -p "{\"spec\":{\"hostnames\":[\"${hostname}\"]}}"
+          fi
+        done
+
         # patch imagePullPolicy to pull the image from remote registry
         for dep in $(oc get deployments -n mcp-test -o jsonpath='{.items[*].metadata.name}'); do
           oc patch deployment "$dep" -n mcp-test --type='json' -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Always"}]'
@@ -79,10 +133,12 @@ spec:
         oc apply -f config/mcp-gateway/overlays/mcp-system/trusted-header-public-key.yaml -n $MCP_GATEWAY_NAMESPACE
 
         # Update Keycloak configuration, set HOSTNAME and PROXY_HEADERS env vars
-        kubectl get keycloak keycloak -n tools -o json | jq --arg hostname "$KEYCLOAK_URL" '.spec.additionalOptions |= (
-            (. // []) | map(select(.name != "HOSTNAME" and .name != "PROXY_HEADERS")) +
+        additional_options=$(kubectl get keycloak keycloak -n tools -o json | jq --arg hostname "$KEYCLOAK_URL" '
+            (.spec.additionalOptions // []) | map(select(.name != "HOSTNAME" and .name != "PROXY_HEADERS")) +
             [{"name": "HOSTNAME", "value": $hostname}, {"name": "PROXY_HEADERS", "value": "xforwarded"}]
-        )' | kubectl apply -f -
+        ')
+        kubectl patch keycloak keycloak -n tools --type=merge \
+          -p "$(jq -n --argjson options "$additional_options" '{spec:{additionalOptions:$options}}')"
 
         # Add keycloak listener to mcp-gateway if it doesn't exist
         if ! kubectl get gateway mcp-gateway -n gateway-system -o json | jq -e '.spec.listeners[] | select(.name == "keycloak")' > /dev/null 2>&1; then
@@ -223,10 +279,14 @@ spec:
         kubectl apply -f ./config/samples/oauth-token-exchange/trusted-headers-private-key.yaml -n $MCP_GATEWAY_NAMESPACE
 
         # Create required AuthPolicies
-        sed -e "s|https://keycloak.127-0-0-1.sslip.io:8002|${KEYCLOAK_URL}|g" -e "s|http://mcp.127-0-0-1.sslip.io:8001|https://mcp.${E2E_DOMAIN}|g" -e "s|namespace: mcp-system|namespace: ${MCP_GATEWAY_NAMESPACE}|g" config/e2e/auth/mcp-auth-policy.yaml | kubectl apply -f -
+        sed -e "s|https://keycloak.127-0-0-1.sslip.io:8002|${KEYCLOAK_URL}|g" -e "s|http://mcp.127-0-0-1.sslip.io:8001|https://mcp.${E2E_DOMAIN}|g" -e "s|namespace: mcp-system|namespace: ${MCP_GATEWAY_NAMESPACE}|g" config/e2e/auth/mcp-auth-policy.yaml | \
+          kubectl apply -f -
 
-
-        sed -e "s|https://keycloak.127-0-0-1.sslip.io:8002|${KEYCLOAK_URL}|g" -e "s|http://mcp.127-0-0-1.sslip.io:8001|https://mcp.${E2E_DOMAIN}|g" config/e2e/auth/mcps-auth-policy.yaml | kubectl apply -f -
+        # Set the expected denial status before apply so last-applied-configuration includes it.
+        sed -e "s|https://keycloak.127-0-0-1.sslip.io:8002|${KEYCLOAK_URL}|g" -e "s|http://mcp.127-0-0-1.sslip.io:8001|https://mcp.${E2E_DOMAIN}|g" config/e2e/auth/mcps-auth-policy.yaml | \
+          kubectl patch --local -f - --type=merge \
+            -p '{"spec":{"rules":{"response":{"unauthorized":{"code":401}}}}}' -o yaml | \
+          kubectl apply -f -
 
         # Patch Authorino to trust default OpenShift ingress certificate
         # Already done as part of Kuadrant installation
@@ -257,11 +317,53 @@ spec:
         ]'
 
         if [ "$(params.run-tests)" = "true" ]; then
+          cd "$(workspaces.shared-workspace.path)/kuadrant-operator"
+
+          # Copy the auth tests file and create a small suite_test.go to execute
+          # the auth tests against the existing cluster. Use a dedicated suite to
+          # avoid starting another operator and losing kubeconfig bearer credentials.
+          AUTH_TEST_DIR=$(mktemp -d "$PWD/mcp-auth-e2e.XXXXXX")
+          cp tests/istio/mcp_gateway_auth_test.go "$AUTH_TEST_DIR/"
+          cat > "$AUTH_TEST_DIR/suite_test.go" <<'GO'
+        package istio_test
+
+        import (
+            "testing"
+            "time"
+
+            . "github.com/onsi/ginkgo/v2"
+            . "github.com/onsi/gomega"
+            "sigs.k8s.io/controller-runtime/pkg/client"
+            "sigs.k8s.io/controller-runtime/pkg/client/config"
+        )
+
+        var k8sClient client.Client
+
+        func testClient() client.Client { return k8sClient }
+
+        func TestMCPAuth(t *testing.T) {
+            RegisterFailHandler(Fail)
+            SetDefaultEventuallyPollingInterval(500 * time.Millisecond)
+            SetDefaultEventuallyTimeout(2 * time.Minute)
+            RunSpecs(t, "MCP Gateway AuthPolicy integration")
+        }
+
+        var _ = BeforeSuite(func() {
+            cfg, err := config.GetConfig()
+            Expect(err).NotTo(HaveOccurred())
+            k8sClient, err = client.New(cfg, client.Options{})
+            Expect(err).NotTo(HaveOccurred())
+        })
+        GO
+
           GINKGO_RC=0
-          ./bin/ginkgo -v --tags=e2e --timeout="$E2E_TIMEOUT" --procs="$E2E_PROCS" --junit-report="junit-e2e-auth-report.xml" --output-dir="$(workspaces.shared-workspace.path)" --focus="AuthPolicy" ./tests/e2e || GINKGO_RC=$?
+          go test -count=1 -v -tags=integration,mcp_auth_e2e -timeout="$E2E_TIMEOUT" "$AUTH_TEST_DIR" \
+            -ginkgo.v -ginkgo.timeout="$E2E_TIMEOUT" -ginkgo.fail-on-empty \
+            -ginkgo.junit-report="$(workspaces.shared-workspace.path)/junit-e2e-auth-report.xml" \
+            -ginkgo.focus="MCP Gateway AuthPolicy integration" || GINKGO_RC=$?
           REPORT="$(workspaces.shared-workspace.path)/junit-e2e-auth-report.xml"
           # Clean up Ginkgo JUnit XML for ReportPortal:
-          #  - Keep only tests matching --focus=AuthPolicy (also removes suite setup/teardown)
+          #  - Keep only MCP Gateway AuthPolicy specs (also removes suite setup/teardown)
           #    Preserve all auth skips, including those caused by an earlier Ordered test failure.
           #  - Remove <properties> block (Ginkgo metadata that causes RP to silently fail suite creation)
           #  - Rename testsuite/classname so tests appear grouped under 'e2e-auth' in RP
