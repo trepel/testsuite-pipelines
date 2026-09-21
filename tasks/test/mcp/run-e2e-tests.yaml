@@ -289,6 +289,29 @@ spec:
         ]'
         oc rollout status deployment/redis -n "$MCP_GATEWAY_NAMESPACE" --timeout=60s
 
+        # allow gateway connections to redis
+        oc apply -n "$MCP_GATEWAY_NAMESPACE" -f - <<EOF
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        metadata:
+          name: redis-allow-mcp-gateway
+        spec:
+          podSelector:
+            matchLabels:
+              app: redis
+          policyTypes:
+            - Ingress
+          ingress:
+            - from:
+                - podSelector:
+                    matchLabels:
+                      app.kubernetes.io/managed-by: mcp-gateway-controller
+                      app.kubernetes.io/name: mcp-gateway
+              ports:
+                - protocol: TCP
+                  port: 6379
+        EOF
+
         oc apply -f config/mcp-gateway/overlays/mcp-system/trusted-header-public-key.yaml -n $MCP_GATEWAY_NAMESPACE
 
         make deploy-e2e-gateways
