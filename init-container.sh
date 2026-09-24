@@ -2,8 +2,8 @@
 set -euo pipefail
 
 case "${TARGETPLATFORM}" in
-    "linux/amd64") ARCH=amd64 && ROSA_ARCH=x86_64 && AWS_ARCH=x86_64 && NODE_ARCH=x64 ;;
-    "linux/arm64") ARCH=arm64 && ROSA_ARCH=arm64 && AWS_ARCH=aarch64 && NODE_ARCH=arm64 ;;
+    "linux/amd64") ARCH=amd64 && AWS_ARCH=x86_64 && NODE_ARCH=x64 ;;
+    "linux/arm64") ARCH=arm64 && AWS_ARCH=aarch64 && NODE_ARCH=arm64 ;;
     *) exit 1 ;;
 esac
 
@@ -21,10 +21,11 @@ curl -Lfs "https://mirror.openshift.com/pub/openshift-v4/${AWS_ARCH}/clients/ocp
     tar -xz -f - -C /usr/local/bin 'oc' \
     && chmod 0755 /usr/local/bin/oc
 
-curl -Lfs "https://github.com/openshift/rosa/releases/download/$(curl -Lfs https://api.github.com/repos/openshift/rosa/releases/latest \
-    | jq -r .tag_name)/rosa_Linux_${ROSA_ARCH}.tar.gz" | \
-    tar -xz -f - -C /usr/local/bin 'rosa' \
-    && chmod 0755 /usr/local/bin/rosa
+curl -Lfs -o rosa.zip "https://github.com/openshift/rosa/releases/download/$(curl -Lfs https://api.github.com/repos/openshift/rosa/releases/latest \
+    | jq -r .tag_name)/rosa_linux_${ARCH}.zip" \
+    && unzip -o rosa.zip -d /usr/local/bin \
+    && chmod 0755 /usr/local/bin/rosa \
+    && rm rosa.zip
 
 curl -LSs -o /usr/local/bin/opm "https://github.com/operator-framework/operator-registry/releases/download/$(curl -Lfs https://api.github.com/repos/operator-framework/operator-registry/releases/latest \
     | jq -r .tag_name)/linux-${ARCH}-opm" \
