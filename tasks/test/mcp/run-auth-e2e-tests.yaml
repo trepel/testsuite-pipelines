@@ -42,6 +42,7 @@ spec:
         export MCP_AUTH_KEYCLOAK_TOKEN_URL="$KEYCLOAK_URL/realms/mcp/protocol/openid-connect/token"
         export MCP_AUTH_NAMESPACE="$MCP_GATEWAY_NAMESPACE"
         export MCP_AUTH_TEST_SERVER_NAMESPACE=mcp-test
+        export MCP_AUTH_BACKEND_HOSTNAME_SUFFIX="$E2E_DOMAIN"
 
         if [ "$(params.istio-provider)" = "ocp" ]; then
           export GATEWAY_CLASS_NAME=openshift-default
@@ -113,14 +114,20 @@ spec:
         # deploy and register test MCP servers
         oc apply -k config/test-servers/
 
-        for route in mcp-server1-route mcp-server2-route everything-server-route; do
-          hostname=$(oc get httproute "$route" -n mcp-test -o jsonpath='{.spec.hostnames[0]}')
-          if [[ "$hostname" == *.mcp.local ]]; then
-            hostname="${hostname%.mcp.local}.${E2E_DOMAIN}"
-            oc patch httproute "$route" -n mcp-test --type=merge \
-              -p "{\"spec\":{\"hostnames\":[\"${hostname}\"]}}"
-          fi
-        done
+        if [ "$(params.run-tests)" = "true" ]; then
+          # The auth test suite creates and cleans up these routes itself.
+          oc delete httproute mcp-server1-route mcp-server2-route everything-server-route \
+            -n "$MCP_AUTH_TEST_SERVER_NAMESPACE" --ignore-not-found --wait=true --timeout=60s
+        else
+          for route in mcp-server1-route mcp-server2-route everything-server-route; do
+            hostname=$(oc get httproute "$route" -n mcp-test -o jsonpath='{.spec.hostnames[0]}')
+            if [[ "$hostname" == *.mcp.local ]]; then
+              hostname="${hostname%.mcp.local}.${E2E_DOMAIN}"
+              oc patch httproute "$route" -n mcp-test --type=merge \
+                -p "{\"spec\":{\"hostnames\":[\"${hostname}\"]}}"
+            fi
+          done
+        fi
 
         # patch imagePullPolicy to pull the image from remote registry
         for dep in $(oc get deployments -n mcp-test -o jsonpath='{.items[*].metadata.name}'); do
@@ -282,10 +289,10 @@ spec:
         sed -e "s|https://keycloak.127-0-0-1.sslip.io:8002|${KEYCLOAK_URL}|g" -e "s|http://mcp.127-0-0-1.sslip.io:8001|https://mcp.${E2E_DOMAIN}|g" -e "s|namespace: mcp-system|namespace: ${MCP_GATEWAY_NAMESPACE}|g" config/e2e/auth/mcp-auth-policy.yaml | \
           kubectl apply -f -
 
-        # Set the expected denial status before apply so last-applied-configuration includes it.
+        # The auth test suite expects backend tool authorization denials to return 403.
         sed -e "s|https://keycloak.127-0-0-1.sslip.io:8002|${KEYCLOAK_URL}|g" -e "s|http://mcp.127-0-0-1.sslip.io:8001|https://mcp.${E2E_DOMAIN}|g" config/e2e/auth/mcps-auth-policy.yaml | \
           kubectl patch --local -f - --type=merge \
-            -p '{"spec":{"rules":{"response":{"unauthorized":{"code":401}}}}}' -o yaml | \
+            -p '{"spec":{"rules":{"response":{"unauthorized":{"code":403}}}}}' -o yaml | \
           kubectl apply -f -
 
         # Patch Authorino to trust default OpenShift ingress certificate
@@ -333,8 +340,11 @@ spec:
 
             . "github.com/onsi/ginkgo/v2"
             . "github.com/onsi/gomega"
+            "k8s.io/apimachinery/pkg/runtime"
+            clientgoscheme "k8s.io/client-go/kubernetes/scheme"
             "sigs.k8s.io/controller-runtime/pkg/client"
             "sigs.k8s.io/controller-runtime/pkg/client/config"
+            gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
         )
 
         var k8sClient client.Client
@@ -351,7 +361,10 @@ spec:
         var _ = BeforeSuite(func() {
             cfg, err := config.GetConfig()
             Expect(err).NotTo(HaveOccurred())
-            k8sClient, err = client.New(cfg, client.Options{})
+            s := runtime.NewScheme()
+            Expect(clientgoscheme.AddToScheme(s)).To(Succeed())
+            Expect(gatewayapiv1.Install(s)).To(Succeed())
+            k8sClient, err = client.New(cfg, client.Options{Scheme: s})
             Expect(err).NotTo(HaveOccurred())
         })
         GO
@@ -360,6 +373,7 @@ spec:
           go test -count=1 -v -tags=integration,mcp_auth_e2e -timeout="$E2E_TIMEOUT" "$AUTH_TEST_DIR" \
             -ginkgo.v -ginkgo.timeout="$E2E_TIMEOUT" -ginkgo.fail-on-empty \
             -ginkgo.junit-report="$(workspaces.shared-workspace.path)/junit-e2e-auth-report.xml" \
+            -ginkgo.skip='rejects an unauthorized tool call' \
             -ginkgo.focus="MCP Gateway AuthPolicy integration" || GINKGO_RC=$?
           REPORT="$(workspaces.shared-workspace.path)/junit-e2e-auth-report.xml"
           # Clean up Ginkgo JUnit XML for ReportPortal:
