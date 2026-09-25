@@ -154,8 +154,7 @@ spec:
   - description: Kuadrant operator git revision (branch or tag) for the MCP auth tests
     name: kuadrant-operator-revision
     type: string
-    # Switch to main after https://github.com/Kuadrant/kuadrant-operator/pull/2262 merges.
-    default: test/move-mcp-authpolicy-e2e
+    default: main
   - description: Run MCP e2e tests (true/false)
     name: run-e2e-tests
     type: string
