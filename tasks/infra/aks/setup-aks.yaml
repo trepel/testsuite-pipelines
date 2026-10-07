@@ -1,0 +1,298 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: setup-aks
+spec:
+  description: Installs Kuadrant and its dependencies, and deploys testing tools on an AKS cluster
+  params:
+    - name: kubeconfig-path
+      type: string
+      description: Path to workspace kubeconfig
+    - name: additional-helm-tools-flags
+      type: string
+      default: "--set=tools.keycloak.keycloakProvider=deployment --set=tools.coredns.enable=false --set=tools.openshift=false"
+      description: Additional flags for tools helm install
+    - name: registry-redhat-io-pull-secret
+      type: string
+      default: registry-redhat-io-pull-secret
+      description: Secret name in the pipeline namespace containing registry.redhat.io pull credentials
+    - name: rhcl-chart-pull-secret
+      type: string
+      default: rhcl-chart-pull-secret
+      description: Secret name in the pipeline namespace containing registry.redhat.io credentials for the RHCL helm chart and its images
+    - name: rhcl-chart-ref
+      type: string
+      default: oci://registry.redhat.io/rhcl-1/connectivity-link-helm-chart
+      description: Reference of the RHCL operator helm chart
+    - name: rhcl-chart-version
+      type: string
+      description: Version of the RHCL operator helm chart, for example 1.5.0
+  workspaces:
+    - name: shared-workspace
+      description: Shared workspace with kubeconfig
+  steps:
+    - name: install-kuadrant
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      env:
+        - name: KUBECONFIG
+          value: $(params.kubeconfig-path)
+      volumeMounts:
+        - mountPath: /mount/registry-redhat-io-pull-secret
+          name: registry-redhat-io-pull-secret
+        - mountPath: /mount/rhcl-chart-pull-secret
+          name: rhcl-chart-pull-secret
+        - mountPath: /mount/additional-manifests-eks
+          name: additional-manifests-eks
+      script: |
+        #!/bin/bash
+        set -euxo pipefail
+
+        echo "=== Installing Gateway API CRDs v1.5.0 ==="
+        kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.0/standard-install.yaml
+
+        echo "=== Cloning odh-gitops for downstream operator charts ==="
+        git clone --depth 1 https://github.com/opendatahub-io/odh-gitops.git /tmp/odh-gitops
+
+        # TODO: Replace with official chart when ready
+        echo "=== Installing cert-manager operator (downstream RHOAI charts) ==="
+        helm install cert-manager-operator /tmp/odh-gitops/charts/dependencies/cert-manager-operator \
+          --namespace default \
+          --set 'imagePullSecrets[0].name=registry-redhat-io-pull-secret' \
+          --timeout=300s
+
+        echo "=== Creating registry.redhat.io pull secret in cert-manager namespaces ==="
+        for ns in cert-manager cert-manager-operator; do
+          kubectl -n $ns create secret generic registry-redhat-io-pull-secret \
+            --from-file=.dockerconfigjson=/mount/registry-redhat-io-pull-secret/.dockerconfigjson \
+            --type=kubernetes.io/dockerconfigjson \
+            --dry-run=client -o yaml | kubectl apply -f -
+        done
+        kubectl wait --for=condition=Ready pods --all -n cert-manager-operator --timeout=300s
+        echo "Waiting for cert-manager pods to be created by operator..."
+        for i in $(seq 1 60); do
+          if kubectl get pods -n cert-manager --no-headers 2>/dev/null | grep -q .; then break; fi
+          sleep 5
+        done
+        kubectl wait --for=condition=Ready pods --all -n cert-manager --timeout=300s
+
+        # TODO: Replace with official chart when ready
+        # Sail Operator chart from odh-gitops is the OpenShift Service Mesh (OSSM) operator
+        echo "=== Installing Sail Operator (downstream) ==="
+        helm install sail-operator /tmp/odh-gitops/charts/dependencies/sail-operator \
+          --namespace default \
+          --set 'imagePullSecrets[0].name=registry-redhat-io-pull-secret' \
+          --timeout=300s
+
+        # IstioRevision CRD is too large for Helm's default client-side apply
+        echo "=== Applying sail-operator CRDs with server-side apply ==="
+        for crd in /tmp/odh-gitops/charts/dependencies/sail-operator/crds/*.yaml; do
+          kubectl apply --server-side -f "$crd"
+        done
+
+        echo "=== Creating registry.redhat.io pull secret in istio-system ==="
+        kubectl -n istio-system create secret generic registry-redhat-io-pull-secret \
+          --from-file=.dockerconfigjson=/mount/registry-redhat-io-pull-secret/.dockerconfigjson \
+          --type=kubernetes.io/dockerconfigjson \
+          --dry-run=client -o yaml | kubectl apply -f -
+        echo "Waiting for sail-operator pods to be created..."
+        for i in $(seq 1 60); do
+          if kubectl get pods -n istio-system --no-headers 2>/dev/null | grep -q .; then break; fi
+          sleep 5
+        done
+        kubectl wait --for=condition=Ready pods --all -n istio-system --timeout=300s
+
+        echo "=== Applying Istio CR ==="
+        kubectl apply -f - <<'EOF'
+        apiVersion: sailoperator.io/v1
+        kind: Istio
+        metadata:
+          name: default
+        spec:
+          version: v1.28-latest
+          namespace: istio-system
+          values:
+            meshConfig:
+              defaultConfig:
+                tracing: {}
+              enableTracing: true
+              extensionProviders:
+                - name: jaeger-otlp
+                  opentelemetry:
+                    port: 4317
+                    service: jaeger-collector.tools.svc.cluster.local
+            pilot:
+              autoscaleEnabled: false
+        EOF
+        kubectl wait --for=condition=Ready istio/default --timeout=300s
+
+        echo "=== Creating Istio Telemetry ==="
+        kubectl apply -f - <<'EOF'
+        apiVersion: telemetry.istio.io/v1
+        kind: Telemetry
+        metadata:
+          name: default-telemetry
+          namespace: istio-system
+        spec:
+          tracing:
+            - providers:
+                - name: jaeger-otlp
+              randomSamplingPercentage: 100
+        EOF
+
+        echo "=== Installing Prometheus stack ==="
+        kubectl create namespace monitoring || true
+        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update
+        helm install prometheus prometheus-community/kube-prometheus-stack \
+          --version 67.4.0 \
+          --namespace monitoring \
+          --wait --timeout=600s \
+          --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+          --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false \
+          --set prometheus.prometheusSpec.ruleSelectorNilUsesHelmValues=false \
+          --set prometheus.service.type=LoadBalancer
+
+        echo "=== Installing RHCL Operator ==="
+        kubectl create namespace kuadrant-system || true
+
+        kubectl -n kuadrant-system create secret generic rhcl-chart-pull-secret \
+          --from-file=.dockerconfigjson=/mount/rhcl-chart-pull-secret/.dockerconfigjson \
+          --type=kubernetes.io/dockerconfigjson \
+          --dry-run=client -o yaml | kubectl apply -f -
+
+        cp /mount/rhcl-chart-pull-secret/.dockerconfigjson /tmp/rhcl-registry-config.json
+        helm install rhcl-operator $(params.rhcl-chart-ref) \
+          --version $(params.rhcl-chart-version) \
+          --namespace kuadrant-system \
+          --registry-config /tmp/rhcl-registry-config.json \
+          --set 'imagePullSecrets[0].name=rhcl-chart-pull-secret' \
+          --wait --timeout=600s
+
+        echo "=== Waiting for component operator deployments to be created ==="
+        kubectl wait --for=create -n kuadrant-system --timeout=300s \
+          deployment/authorino-operator deployment/developer-portal-controller \
+          deployment/dns-operator-controller-manager deployment/limitador-operator-controller-manager \
+          deployment/mcp-gateway-controller
+
+        echo "=== Linking RHCL pull secret to component operator ServiceAccounts ==="
+        kubectl -n kuadrant-system patch serviceaccount authorino-operator developer-portal-controller-manager dns-operator-controller-manager limitador-operator-controller-manager mcp-gateway-controller \
+          -p '{"imagePullSecrets":[{"name":"rhcl-chart-pull-secret"}]}'
+
+        echo "=== Restarting component operator deployments ==="
+        kubectl -n kuadrant-system rollout restart deployment authorino-operator developer-portal-controller dns-operator-controller-manager limitador-operator-controller-manager mcp-gateway-controller
+        kubectl -n kuadrant-system rollout status deployment authorino-operator developer-portal-controller dns-operator-controller-manager limitador-operator-controller-manager mcp-gateway-controller --timeout=300s
+
+        echo "=== Applying Kuadrant CR ==="
+        kubectl apply -f - <<'EOF'
+        apiVersion: kuadrant.io/v1beta1
+        kind: Kuadrant
+        metadata:
+          name: kuadrant-sample
+          namespace: kuadrant-system
+        spec:
+          observability:
+            dataPlane:
+              defaultLevels:
+                - debug: "true"
+              httpHeaderIdentifier: x-request-id
+            enable: true
+            tracing:
+              defaultEndpoint: "rpc://jaeger-collector.tools.svc.cluster.local:4317"
+              insecure: true
+        EOF
+
+        echo "=== Waiting for Authorino and Limitador deployments to be created ==="
+        kubectl wait --for=create -n kuadrant-system --timeout=300s \
+          deployment/authorino deployment/limitador-limitador
+
+        echo "=== Linking RHCL pull secret to Authorino and Limitador ServiceAccounts ==="
+        kubectl -n kuadrant-system patch serviceaccount authorino-authorino default \
+          -p '{"imagePullSecrets":[{"name":"rhcl-chart-pull-secret"}]}'
+
+        echo "=== Restarting Authorino and Limitador deployments ==="
+        kubectl -n kuadrant-system rollout restart deployment authorino limitador-limitador
+        kubectl -n kuadrant-system rollout status deployment authorino limitador-limitador --timeout=300s
+
+        echo "=== Waiting for all Kuadrant components to be ready ==="
+        kubectl wait --for=condition=Available deployment --all -n kuadrant-system --timeout=300s
+        kubectl wait --for=condition=Ready kuadrant/kuadrant-sample -n kuadrant-system --timeout=120s
+
+        echo "=== Configuring observability ==="
+        kubectl patch deployment kuadrant-operator-controller-manager -n kuadrant-system --type=json -p '[
+          {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "OTEL_EXPORTER_OTLP_ENDPOINT", "value": "http://jaeger-collector.tools.svc.cluster.local:4318"}},
+          {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "OTEL_EXPORTER_OTLP_INSECURE", "value": "true"}}
+        ]'
+        kubectl patch deployment limitador-operator-controller-manager -n kuadrant-system --type=json -p '[
+          {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "OTEL_EXPORTER_OTLP_ENDPOINT", "value": "http://jaeger-collector.tools.svc.cluster.local:4318"}},
+          {"op": "add", "path": "/spec/template/spec/containers/0/env/-", "value": {"name": "OTEL_EXPORTER_OTLP_INSECURE", "value": "true"}}
+        ]'
+        kubectl patch limitador limitador -n kuadrant-system --type merge --patch '{"spec":{"verbosity":3}}'
+        kubectl patch authorino authorino -n kuadrant-system --type merge --patch '{"spec":{"logLevel":"debug", "logMode": "development"}}'
+        kubectl rollout status deployment kuadrant-operator-controller-manager -n kuadrant-system --timeout=120s
+        kubectl rollout status deployment limitador-operator-controller-manager -n kuadrant-system --timeout=120s
+        kubectl wait --for=condition=Ready limitador limitador -n kuadrant-system --timeout=120s
+        kubectl wait --for=condition=Ready authorino authorino -n kuadrant-system --timeout=120s
+        kubectl wait --for=condition=Ready kuadrant kuadrant-sample -n kuadrant-system --timeout=120s
+
+        echo "=== Creating test namespaces ==="
+        kubectl create namespace kuadrant || true
+        kubectl create namespace kuadrant2 || true
+
+        echo "=== Creating registry.redhat.io pull secret in test namespaces ==="
+        for ns in kuadrant kuadrant2; do
+          kubectl -n $ns create secret generic registry-redhat-io-pull-secret \
+            --from-file=.dockerconfigjson=/mount/registry-redhat-io-pull-secret/.dockerconfigjson \
+            --type=kubernetes.io/dockerconfigjson \
+            --dry-run=client -o yaml | kubectl apply -f -
+        done
+
+        echo "=== Applying additional test manifests ==="
+        kubectl apply -f /mount/additional-manifests-eks/
+
+        echo "=== Kuadrant setup complete ==="
+        kubectl get kuadrant -n kuadrant-system
+        kubectl get pods -n kuadrant-system
+
+    - name: install-tools
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      env:
+        - name: KUBECONFIG
+          value: $(params.kubeconfig-path)
+      script: |
+        #!/bin/bash
+        set -euxo pipefail
+
+        echo "=== Installing testing tools ==="
+        kubectl create namespace tools || true
+        helm install \
+          --repo https://kuadrant.io/helm-charts-olm \
+          --version 0.0.0 \
+          --namespace tools \
+          $(params.additional-helm-tools-flags) \
+          --wait --timeout=10m0s \
+          tools tools-instances
+
+        echo "=== Waiting for LoadBalancer IPs ==="
+        kubectl wait --for=jsonpath='{.status.loadBalancer.ingress}' \
+          svc/prometheus-kube-prometheus-prometheus -n monitoring --timeout=120s 2>/dev/null || true
+        kubectl wait --for=jsonpath='{.status.loadBalancer.ingress}' \
+          svc/keycloak -n tools --timeout=120s 2>/dev/null || true
+        kubectl wait --for=jsonpath='{.status.loadBalancer.ingress}' \
+          svc/jaeger-query -n tools --timeout=120s 2>/dev/null || true
+        kubectl wait --for=jsonpath='{.status.loadBalancer.ingress}' \
+          svc/mockserver -n tools --timeout=120s 2>/dev/null || true
+
+        echo "=== Tools status ==="
+        kubectl get pods -n tools
+        kubectl get svc -n tools
+  volumes:
+    - secret:
+        secretName: $(params.registry-redhat-io-pull-secret)
+      name: registry-redhat-io-pull-secret
+    - secret:
+        secretName: $(params.rhcl-chart-pull-secret)
+      name: rhcl-chart-pull-secret
+    - secret:
+        secretName: additional-manifests-eks
+      name: additional-manifests-eks
