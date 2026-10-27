@@ -1,0 +1,140 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: provision-eks
+spec:
+  description: Provisions an EKS cluster on AWS
+  params:
+    - name: cluster-name
+      type: string
+      default: kuadrant-test
+    - name: region
+      type: string
+      default: eu-north-1
+    - name: k8s-version
+      type: string
+      default: "1.36"
+    - name: node-type
+      type: string
+      default: m5.xlarge
+    - name: node-count
+      type: string
+      default: "3"
+  results:
+    - name: kubeconfig-path
+      description: Path to kubeconfig in the workspace
+  workspaces:
+    - name: shared-workspace
+      description: Shared workspace to persist kubeconfig between tasks
+  steps:
+    - name: provision-eks
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      computeResources:
+        limits:
+          cpu: '1000m'
+          memory: '1Gi'
+        requests:
+          cpu: '500m'
+          memory: '512Mi'
+      env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: eks-aws-credentials
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: eks-aws-credentials
+              key: AWS_SECRET_ACCESS_KEY
+      command:
+        - /bin/bash
+        - -c
+        - |
+          set -euxo pipefail
+
+          curl -fsSL "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_Linux_amd64.tar.gz" | tar xz -C /usr/local/bin
+
+          export AWS_DEFAULT_REGION="$(params.region)"
+
+          echo "=== Creating EKS cluster ==="
+          eksctl create cluster \
+            --name "$(params.cluster-name)" \
+            --region "$(params.region)" \
+            --version "$(params.k8s-version)" \
+            --nodegroup-name workers \
+            --node-type "$(params.node-type)" \
+            --nodes "$(params.node-count)" \
+            --managed
+
+          echo "=== Configuring EBS CSI driver ==="
+          NODE_ROLE=$(aws cloudformation describe-stack-resource \
+            --stack-name "eksctl-$(params.cluster-name)-nodegroup-workers" \
+            --logical-resource-id NodeInstanceRole \
+            --query "StackResourceDetail.PhysicalResourceId" \
+            --output text)
+          aws iam attach-role-policy \
+            --role-name "$NODE_ROLE" \
+            --policy-arn "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+          aws eks create-addon \
+            --cluster-name "$(params.cluster-name)" \
+            --addon-name aws-ebs-csi-driver \
+            --region "$(params.region)"
+          aws eks wait addon-active \
+            --cluster-name "$(params.cluster-name)" \
+            --addon-name aws-ebs-csi-driver \
+            --region "$(params.region)"
+          kubectl annotate storageclass gp2 \
+            storageclass.kubernetes.io/is-default-class=true --overwrite
+
+          echo "=== Saving kubeconfig ==="
+          KUBECONFIG_PATH="$(workspaces.shared-workspace.path)/kubeconfig-eks"
+          aws eks update-kubeconfig \
+            --name "$(params.cluster-name)" \
+            --region "$(params.region)" \
+            --kubeconfig "$KUBECONFIG_PATH"
+
+          echo "=== Creating token-based kubeconfig (no aws CLI dependency on other pipeline tasks) ==="
+          export KUBECONFIG="$KUBECONFIG_PATH"
+          kubectl create serviceaccount pipeline-admin -n kube-system
+          kubectl create clusterrolebinding pipeline-admin --clusterrole=cluster-admin --serviceaccount=kube-system:pipeline-admin
+          kubectl apply -f - <<'SAEOF'
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: pipeline-admin-token
+            namespace: kube-system
+            annotations:
+              kubernetes.io/service-account.name: pipeline-admin
+          type: kubernetes.io/service-account-token
+          SAEOF
+          sleep 5
+          TOKEN=$(kubectl get secret pipeline-admin-token -n kube-system -o jsonpath='{.data.token}' | base64 -d)
+          CA_CERT=$(kubectl get secret pipeline-admin-token -n kube-system -o jsonpath='{.data.ca\.crt}')
+          API_SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+          cat > "$KUBECONFIG_PATH" <<KCEOF
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - cluster:
+              certificate-authority-data: $CA_CERT
+              server: $API_SERVER
+            name: eks-cluster
+          contexts:
+          - context:
+              cluster: eks-cluster
+              user: pipeline-admin
+            name: eks
+          current-context: eks
+          users:
+          - name: pipeline-admin
+            user:
+              token: $TOKEN
+          KCEOF
+
+          echo -n "$KUBECONFIG_PATH" | tee $(results.kubeconfig-path.path)
+
+          echo ""
+          echo "=== EKS cluster ready ==="
+          kubectl --kubeconfig "$KUBECONFIG_PATH" get nodes

@@ -1,0 +1,134 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: delete-eks
+spec:
+  description: Delete EKS cluster and associated AWS resources
+  params:
+    - name: cluster-name
+      type: string
+      default: kuadrant-test
+    - name: region
+      type: string
+      default: eu-north-1
+  steps:
+    - name: delete-eks
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      computeResources:
+        limits:
+          cpu: '500m'
+          memory: '512Mi'
+        requests:
+          cpu: '250m'
+          memory: '256Mi'
+      env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: eks-aws-credentials
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: eks-aws-credentials
+              key: AWS_SECRET_ACCESS_KEY
+      command:
+        - /bin/bash
+        - -c
+        - |
+          set -euxo pipefail
+
+          curl -fsSL "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_Linux_amd64.tar.gz" | tar xz -C /usr/local/bin
+
+          export AWS_DEFAULT_REGION="$(params.region)"
+
+          echo "=== Cleaning up EKS cluster '$(params.cluster-name)' ==="
+
+          VPC_ID=$(aws eks describe-cluster --name "$(params.cluster-name)" --region "$(params.region)" \
+            --query 'cluster.resourcesVpcConfig.vpcId' --output text 2>/dev/null || true)
+
+          if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "None" ]; then
+            VPC_ID=$(aws cloudformation describe-stack-resources \
+              --stack-name "eksctl-$(params.cluster-name)-cluster" --region "$(params.region)" \
+              --query "StackResources[?ResourceType=='AWS::EC2::VPC'].PhysicalResourceId | [0]" \
+              --output text 2>/dev/null || true)
+          fi
+
+          delete_vpc_elbs() {
+            local found=false
+            for elb in $(aws elb describe-load-balancers --region "$(params.region)" \
+              --query "LoadBalancerDescriptions[?VPCId=='$VPC_ID'].LoadBalancerName" --output text 2>/dev/null); do
+              echo "Deleting classic ELB: $elb"
+              aws elb delete-load-balancer --region "$(params.region)" --load-balancer-name "$elb"
+              found=true
+            done
+            for arn in $(aws elbv2 describe-load-balancers --region "$(params.region)" \
+              --query "LoadBalancers[?VpcId=='$VPC_ID'].LoadBalancerArn" --output text 2>/dev/null); do
+              echo "Deleting ELBv2: $arn"
+              aws elbv2 delete-load-balancer --region "$(params.region)" --load-balancer-arn "$arn"
+              found=true
+            done
+            if $found; then
+              echo "=== Waiting for ELBs to drain (30s) ==="
+              sleep 30
+            fi
+          }
+
+          delete_vpc_security_groups() {
+            for attempt in 1 2 3 4 5 6; do
+              local remaining
+              remaining=$(aws ec2 describe-security-groups --region "$(params.region)" \
+                --filters "Name=vpc-id,Values=$VPC_ID" \
+                --query "SecurityGroups[?GroupName!='default'].GroupId" --output text 2>/dev/null)
+              if [ -z "$remaining" ]; then
+                return 0
+              fi
+              echo "Deleting security groups (attempt $attempt): $remaining"
+              for sg in $remaining; do
+                aws ec2 delete-security-group --region "$(params.region)" --group-id "$sg" 2>/dev/null || true
+              done
+              sleep 15
+            done
+            echo "WARNING: security groups still present in $VPC_ID after 6 attempts"
+          }
+
+          if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
+            echo "=== Deleting LoadBalancers in VPC $VPC_ID ==="
+            delete_vpc_elbs
+            echo "=== Deleting orphaned security groups in VPC $VPC_ID ==="
+            delete_vpc_security_groups
+          fi
+
+          echo "=== Deleting EKS cluster ==="
+          if aws eks describe-cluster --name "$(params.cluster-name)" --region "$(params.region)" &>/dev/null; then
+            eksctl delete cluster --name "$(params.cluster-name)" --region "$(params.region)" --wait \
+              || echo "WARNING: eksctl delete failed, falling back to stack cleanup below"
+          else
+            echo "Cluster '$(params.cluster-name)' not found in EKS, skipping eksctl delete"
+          fi
+
+          if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
+            delete_vpc_elbs
+            delete_vpc_security_groups
+          fi
+
+          FAILED_STACKS=""
+          for stack in $(aws cloudformation list-stacks --region "$(params.region)" \
+            --stack-status-filter DELETE_FAILED ROLLBACK_COMPLETE ROLLBACK_FAILED \
+            --query "StackSummaries[?starts_with(StackName,'eksctl-$(params.cluster-name)-')].StackName" --output text 2>/dev/null); do
+            echo "Deleting stuck stack: $stack"
+            aws cloudformation update-termination-protection \
+              --no-enable-termination-protection \
+              --stack-name "$stack" --region "$(params.region)" 2>/dev/null || true
+            aws cloudformation delete-stack --region "$(params.region)" --stack-name "$stack"
+            aws cloudformation wait stack-delete-complete --region "$(params.region)" --stack-name "$stack" \
+              || FAILED_STACKS="$FAILED_STACKS $stack"
+          done
+
+          if [ -n "$FAILED_STACKS" ]; then
+            echo "ERROR: stacks left undeleted, AWS resources are still billable:$FAILED_STACKS"
+            exit 1
+          fi
+
+          echo "=== Cleanup complete ==="

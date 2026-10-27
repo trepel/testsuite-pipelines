@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - pairs:
+      deployment: kuadrant-qe-pipeline
+      app: test-eks
+
+components:
+  - ../../../tasks/infra/
+  - ../../../tasks/infra/eks/
+  - ../../../tasks/test/
+
+resources:
+  - pipeline.yaml
