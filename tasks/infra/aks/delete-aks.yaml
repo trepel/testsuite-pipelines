@@ -1,0 +1,86 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: delete-aks
+spec:
+  description: Delete AKS cluster and associated Azure resources
+  params:
+    - name: cluster-name
+      type: string
+      default: kuadrant-test
+    - name: region
+      type: string
+      default: northeurope
+  steps:
+    - name: delete-aks
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      computeResources:
+        limits:
+          cpu: '500m'
+          memory: '512Mi'
+        requests:
+          cpu: '250m'
+          memory: '256Mi'
+      env:
+        - name: AZURE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: aks-azure-credentials
+              key: AZURE_CLIENT_ID
+        - name: AZURE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: aks-azure-credentials
+              key: AZURE_CLIENT_SECRET
+        - name: AZURE_TENANT_ID
+          valueFrom:
+            secretKeyRef:
+              name: aks-azure-credentials
+              key: AZURE_TENANT_ID
+        - name: AZURE_SUBSCRIPTION_ID
+          valueFrom:
+            secretKeyRef:
+              name: aks-azure-credentials
+              key: AZURE_SUBSCRIPTION_ID
+      command:
+        - /bin/bash
+        - -c
+        - |
+          set -euxo pipefail
+
+          echo "=== Logging in to Azure ==="
+          az login --service-principal \
+            -u "$AZURE_CLIENT_ID" \
+            -p "$AZURE_CLIENT_SECRET" \
+            --tenant "$AZURE_TENANT_ID"
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+
+          RESOURCE_GROUP="$(params.cluster-name)-rg"
+
+          echo "=== Cleaning up AKS cluster '$(params.cluster-name)' ==="
+
+          if ! az group show --name "$RESOURCE_GROUP" &>/dev/null; then
+            echo "Resource group '$RESOURCE_GROUP' not found, nothing to delete"
+            exit 0
+          fi
+
+          echo "=== Deleting resource group '$RESOURCE_GROUP' (includes cluster, LBs, disks, etc.) ==="
+          az group delete --name "$RESOURCE_GROUP" --yes --no-wait
+
+          echo "=== Waiting for resource group deletion to complete ==="
+          for i in $(seq 1 60); do
+            if ! az group show --name "$RESOURCE_GROUP" &>/dev/null; then
+              echo "Resource group deleted successfully"
+              break
+            fi
+            echo "Waiting for deletion... (attempt $i/60)"
+            sleep 10
+          done
+
+          if az group show --name "$RESOURCE_GROUP" &>/dev/null; then
+            echo "WARNING: Resource group still exists after 10 minutes"
+            exit 1
+          fi
+
+          echo "=== Cleanup complete ==="

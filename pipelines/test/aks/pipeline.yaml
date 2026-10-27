@@ -1,0 +1,201 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: test-aks
+spec:
+  params:
+    # Cluster related parameters
+    - name: cluster-name
+      type: string
+      default: kuadrant-test
+      description: Name of the AKS cluster
+    - name: region
+      type: string
+      default: northeurope
+      description: Azure region for the AKS cluster
+    - name: k8s-version
+      type: string
+      default: "1.30"
+      description: Kubernetes version for the AKS cluster
+    - name: node-type
+      type: string
+      default: Standard_D4s_v5
+      description: Azure VM size for worker nodes
+    - name: node-count
+      type: string
+      default: "3"
+      description: Number of worker nodes
+    # Kuadrant setup parameters
+    - name: additional-helm-tools-flags
+      type: string
+      default: "--set=tools.openshift=false --set=tools.keycloak.keycloakProvider=deployment --set=tools.coredns.enable=false"
+      description: Additional flags for tools helm install
+    - name: rhcl-chart-pull-secret
+      type: string
+      default: rhcl-chart-pull-secret
+      description: Secret name in the pipeline namespace containing registry.redhat.io credentials for the RHCL helm chart and its images
+    - name: rhcl-chart-ref
+      type: string
+      default: oci://registry.redhat.io/rhcl-1/connectivity-link-helm-chart
+      description: Reference of the RHCL operator helm chart
+    - name: rhcl-chart-version
+      type: string
+      description: Version of the RHCL operator helm chart
+    # Testsuite related parameters
+    - name: testsuite-image
+      type: string
+      default: 'quay.io/kuadrant/testsuite:unstable'
+      description: Testsuite image
+    - name: project
+      type: string
+      default: kuadrant
+      description: Kubernetes namespace for tests
+    - name: make-target
+      type: string
+      default: kuadrant
+      description: Makefile target for tests
+    - name: pytest-flags
+      type: string
+      default: ""
+      description: Pytest flags to use with Make
+    - name: settings-cm
+      type: string
+      default: pipeline-settings
+      description: ConfigMap with settings for the testsuite
+    - name: additional-env
+      type: string
+      default: ""
+      description: Additional env for testsuite container separated with spaces
+    # Report Portal related parameters
+    - name: launch-name
+      type: string
+      default: aks
+      description: Prefix of the launch name saved in Report Portal
+    - name: launch-description
+      type: string
+      default: ""
+      description: Optional launch description for Report Portal
+    - name: rp-project
+      type: string
+      default: releases
+      description: Report Portal Project to store test results
+    - name: upload-results
+      type: string
+      default: "true"
+      description: If set to 'true' upload test results to Report Portal
+    - name: rptool-image
+      type: string
+      default: 'quay.io/kuadrant/rptool:unstable'
+      description: rptool image for uploading results to Report Portal
+    # Cleanup
+    - name: cleanup
+      type: string
+      default: "true"
+      description: If set to 'true' the AKS cluster will be deleted after the pipeline completes
+  workspaces:
+    - name: shared-workspace
+      description: Workspace to store cluster state files
+  tasks:
+    - name: provision-aks
+      params:
+        - name: cluster-name
+          value: $(params.cluster-name)-$(context.pipelineRun.name)
+        - name: region
+          value: $(params.region)
+        - name: k8s-version
+          value: $(params.k8s-version)
+        - name: node-type
+          value: $(params.node-type)
+        - name: node-count
+          value: $(params.node-count)
+      taskRef:
+        kind: Task
+        name: provision-aks
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: setup-aks
+      params:
+        - name: kubeconfig-path
+          value: $(tasks.provision-aks.results.kubeconfig-path)
+        - name: additional-helm-tools-flags
+          value: $(params.additional-helm-tools-flags)
+        - name: rhcl-chart-pull-secret
+          value: $(params.rhcl-chart-pull-secret)
+        - name: rhcl-chart-ref
+          value: $(params.rhcl-chart-ref)
+        - name: rhcl-chart-version
+          value: $(params.rhcl-chart-version)
+      runAfter:
+        - provision-aks
+      taskRef:
+        kind: Task
+        name: setup-aks
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: run-tests
+      timeout: "3h"
+      params:
+        - name: testsuite-image
+          value: $(params.testsuite-image)
+        - name: project
+          value: $(params.project)
+        - name: make-target
+          value: $(params.make-target)
+        - name: pytest-flags
+          value: $(params.pytest-flags)
+        - name: settings-cm
+          value: $(params.settings-cm)
+        - name: additional-env
+          value: "$(params.additional-env) KUADRANT_PROMETHEUS__project=monitoring KUADRANT_PROMETHEUS__service=prometheus-kube-prometheus-prometheus"
+        - name: kubeconfig-path
+          value: $(tasks.provision-aks.results.kubeconfig-path)
+        # AKS authenticates via the workspace kubeconfig, but run-tests declares KUBE_USER/KUBE_PASSWORD
+        # as non-optional secretKeyRefs, so this points at an existing Secret purely to let the pod start
+        - name: cluster-credentials
+          value: openshift-pipelines-credentials
+      runAfter:
+        - setup-aks
+      taskRef:
+        kind: Task
+        name: run-tests
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+  finally:
+    - name: rptool-upload
+      when:
+        - input: $(params.upload-results)
+          operator: in
+          values: ["true"]
+      params:
+        - name: launch-name
+          value: $(params.launch-name)
+        - name: launch-description
+          value: $(params.launch-description)
+        - name: rptool-image
+          value: $(params.rptool-image)
+        - name: make-target
+          value: $(params.make-target)
+        - name: rp-project
+          value: $(params.rp-project)
+      taskRef:
+        kind: Task
+        name: rptool-upload
+      workspaces:
+        - name: shared-workspace
+          workspace: shared-workspace
+    - name: delete-aks
+      when:
+        - input: $(params.cleanup)
+          operator: in
+          values: ["true"]
+      params:
+        - name: cluster-name
+          value: $(params.cluster-name)-$(context.pipelineRun.name)
+        - name: region
+          value: $(params.region)
+      taskRef:
+        kind: Task
+        name: delete-aks

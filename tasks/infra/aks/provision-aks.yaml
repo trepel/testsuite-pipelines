@@ -1,0 +1,146 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: provision-aks
+spec:
+  description: Provisions an AKS cluster on Azure
+  params:
+    - name: cluster-name
+      type: string
+      default: kuadrant-test
+    - name: region
+      type: string
+      default: northeurope
+    - name: k8s-version
+      type: string
+      default: "1.30"
+    - name: node-type
+      type: string
+      default: Standard_D4s_v5
+    - name: node-count
+      type: string
+      default: "3"
+  results:
+    - name: kubeconfig-path
+      description: Path to kubeconfig in the workspace
+  workspaces:
+    - name: shared-workspace
+      description: Shared workspace to persist kubeconfig between tasks
+  steps:
+    - name: provision-aks
+      image: quay.io/kuadrant/testsuite-pipelines-tools:latest
+      imagePullPolicy: Always
+      computeResources:
+        limits:
+          cpu: '1000m'
+          memory: '1Gi'
+        requests:
+          cpu: '500m'
+          memory: '512Mi'
+      env:
+        - name: AZURE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: aks-azure-credentials
+              key: AZURE_CLIENT_ID
+        - name: AZURE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: aks-azure-credentials
+              key: AZURE_CLIENT_SECRET
+        - name: AZURE_TENANT_ID
+          valueFrom:
+            secretKeyRef:
+              name: aks-azure-credentials
+              key: AZURE_TENANT_ID
+        - name: AZURE_SUBSCRIPTION_ID
+          valueFrom:
+            secretKeyRef:
+              name: aks-azure-credentials
+              key: AZURE_SUBSCRIPTION_ID
+      command:
+        - /bin/bash
+        - -c
+        - |
+          set -euxo pipefail
+
+          echo "=== Logging in to Azure ==="
+          az login --service-principal \
+            -u "$AZURE_CLIENT_ID" \
+            -p "$AZURE_CLIENT_SECRET" \
+            --tenant "$AZURE_TENANT_ID"
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+
+          RESOURCE_GROUP="$(params.cluster-name)-rg"
+
+          echo "=== Creating resource group ==="
+          az group create \
+            --name "$RESOURCE_GROUP" \
+            --location "$(params.region)"
+
+          echo "=== Querying available Kubernetes versions ==="
+          KUBERNETES_VERSION=$(az aks get-versions --location "$(params.region)" --query 'values[?!isPreview].version' -o tsv | sort -V | tail -1)
+          echo "Latest available K8s version: $KUBERNETES_VERSION"
+
+          echo "=== Creating AKS cluster ==="
+          az aks create \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$(params.cluster-name)" \
+            --location "$(params.region)" \
+            --kubernetes-version "$KUBERNETES_VERSION" \
+            --node-count "$(params.node-count)" \
+            --node-vm-size "$(params.node-type)" \
+            --generate-ssh-keys \
+            --enable-managed-identity
+
+          echo "=== Saving kubeconfig ==="
+          KUBECONFIG_PATH="$(workspaces.shared-workspace.path)/kubeconfig-aks"
+          az aks get-credentials \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$(params.cluster-name)" \
+            --file "$KUBECONFIG_PATH" \
+            --overwrite-existing
+
+          echo "=== Creating token-based kubeconfig (no az CLI dependency on other pipeline tasks) ==="
+          export KUBECONFIG="$KUBECONFIG_PATH"
+          kubectl create serviceaccount pipeline-admin -n kube-system
+          kubectl create clusterrolebinding pipeline-admin --clusterrole=cluster-admin --serviceaccount=kube-system:pipeline-admin
+          kubectl apply -f - <<'SAEOF'
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: pipeline-admin-token
+            namespace: kube-system
+            annotations:
+              kubernetes.io/service-account.name: pipeline-admin
+          type: kubernetes.io/service-account-token
+          SAEOF
+          sleep 5
+          TOKEN=$(kubectl get secret pipeline-admin-token -n kube-system -o jsonpath='{.data.token}' | base64 -d)
+          CA_CERT=$(kubectl get secret pipeline-admin-token -n kube-system -o jsonpath='{.data.ca\.crt}')
+          API_SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+          cat > "$KUBECONFIG_PATH" <<KCEOF
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - cluster:
+              certificate-authority-data: $CA_CERT
+              server: $API_SERVER
+            name: aks-cluster
+          contexts:
+          - context:
+              cluster: aks-cluster
+              user: pipeline-admin
+            name: aks
+          current-context: aks
+          users:
+          - name: pipeline-admin
+            user:
+              token: $TOKEN
+          KCEOF
+
+          echo -n "$KUBECONFIG_PATH" | tee $(results.kubeconfig-path.path)
+
+          echo ""
+          echo "=== AKS cluster ready ==="
+          kubectl --kubeconfig "$KUBECONFIG_PATH" get nodes
