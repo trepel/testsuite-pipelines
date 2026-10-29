@@ -7,7 +7,7 @@ case "${TARGETPLATFORM}" in
     *) exit 1 ;;
 esac
 
-microdnf -y install jq tar xz git buildah findutils unzip python3.11 python3.11-pip make gettext
+microdnf -y install jq tar xz git buildah findutils unzip python3.11 python3.11-pip make gettext skopeo
 
 curl -fsSL -o /usr/local/bin/ocm \
     "https://github.com/openshift-online/ocm-cli/releases/latest/download/ocm-linux-${ARCH}" && chmod 0755 /usr/local/bin/ocm
