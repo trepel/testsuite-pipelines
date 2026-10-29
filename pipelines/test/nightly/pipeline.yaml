@@ -28,7 +28,7 @@ spec:
       name: make-target
       type: string
     - default: ""
-      description: Pytest flags to use with Make (flags="${pytest-flags}" make kuadrant)
+      description: Extra pytest flags. Non-UI nightly jobs always also pass --collect-resources-on-failure.
       name: pytest-flags
       type: string
     - default: pipeline-settings
@@ -133,7 +133,7 @@ spec:
         - name: make-target
           value: kuadrant
         - name: pytest-flags
-          value: $(params.pytest-flags)
+          value: "$(params.pytest-flags) --collect-resources-on-failure"
         - name: settings-cm
           value: $(params.settings-cm)
         - name: additional-env
@@ -158,7 +158,7 @@ spec:
         - name: make-target
           value: authorino-standalone
         - name: pytest-flags
-          value: $(params.pytest-flags)
+          value: "$(params.pytest-flags) --collect-resources-on-failure"
         - name: settings-cm
           value: $(params.settings-cm)
         - name: additional-env
@@ -208,7 +208,7 @@ spec:
         - name: make-target
           value: dnstls
         - name: pytest-flags
-          value: "$(params.pytest-flags) --junitxml=$(workspaces.shared-workspace.path)/junit-dnstls-gcp.xml -o junit_suite_name=dnstls-gcp"
+          value: "$(params.pytest-flags) --collect-resources-on-failure --junitxml=$(workspaces.shared-workspace.path)/junit-dnstls-gcp.xml -o junit_suite_name=dnstls-gcp"
         - name: settings-cm
           value: $(params.settings-cm)
         - name: additional-env
@@ -235,7 +235,7 @@ spec:
         - name: make-target
           value: multicluster
         - name: pytest-flags
-          value: $(params.pytest-flags)
+          value: "$(params.pytest-flags) --collect-resources-on-failure"
         - name: additional-env
           value: '$(params.additional-env) KUADRANT_CONTROL_PLANE__cluster__kubeconfig_path=$(tasks.kubectl-login-second-cluster.results.kubeconfig-path) KUADRANT_CONTROL_PLANE__cluster2__kubeconfig_path=$(tasks.kubectl-login-third-cluster.results.kubeconfig-path)'
         - name: kubeconfig-path
@@ -259,7 +259,7 @@ spec:
         - name: make-target
           value: dnstls
         - name: pytest-flags
-          value: "$(params.pytest-flags) --junitxml=$(workspaces.shared-workspace.path)/junit-dnstls-azure.xml -o junit_suite_name=dnstls-azure"
+          value: "$(params.pytest-flags) --collect-resources-on-failure --junitxml=$(workspaces.shared-workspace.path)/junit-dnstls-azure.xml -o junit_suite_name=dnstls-azure"
         - name: settings-cm
           value: $(params.settings-cm)
         - name: additional-env
@@ -284,7 +284,7 @@ spec:
         - name: make-target
           value: disruptive
         - name: pytest-flags
-          value: $(params.pytest-flags)
+          value: "$(params.pytest-flags) --collect-resources-on-failure"
         - name: settings-cm
           value: $(params.settings-cm)
         - name: additional-env

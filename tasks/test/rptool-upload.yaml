@@ -23,6 +23,7 @@ spec:
     - args:
         - >-
           rptool write --launch-name "${RP_LAUNCH_NAME}" --launch-description "${RP_LAUNCH_DESC}" ${WORKSPACE}/junit-*.xml
+          && rptool attach --launch-name "${RP_LAUNCH_NAME}" --dir "${WORKSPACE}/debug-resources"
       command:
         - /bin/bash
         - -cveo
