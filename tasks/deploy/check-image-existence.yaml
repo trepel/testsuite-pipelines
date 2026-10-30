@@ -8,15 +8,28 @@ spec:
       name: index-image
       type: string
   steps:
-    - args:
-        - >-
-          export TAG=$(echo "$(params.index-image)" | sed -r 's/.*:(.*)/\1/') &&
-          export REPO=$(echo "$(params.index-image)" | sed -r 's/^[^\/]*\/(.*):.*/\1/') &&
-          export RESPONSE=$(curl -sL "https://quay.io/api/v1/repository/${REPO}/tag/?specificTag=${TAG}") &&
-          echo "$RESPONSE" | grep -Fv '{"tags": [], "page": 1, "has_additional": false}'
-      command:
-        - /bin/sh
-        - -cexv
+    - env:
+        - name: INDEX_IMAGE
+          value: $(params.index-image)
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        umask 077
+        AUTH_FILE=$(mktemp)
+        trap 'rm -f "$AUTH_FILE"' EXIT
+
+        echo "Reading openshift-config/pull-secret"
+        kubectl get secret pull-secret -n openshift-config -o json \
+          | jq -er '.data[".dockerconfigjson"]' \
+          | base64 --decode > "$AUTH_FILE"
+
+        if skopeo inspect --authfile "$AUTH_FILE" --no-tags "docker://${INDEX_IMAGE}" > /dev/null; then
+          echo "Image inspection succeeded: ${INDEX_IMAGE}"
+        else
+          status=$?
+          echo "Image inspection failed for ${INDEX_IMAGE} (exit ${status}); see Skopeo error above." >&2
+          exit "$status"
+        fi
       computeResources:
         limits:
           cpu: '250m'

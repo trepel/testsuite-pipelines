@@ -11,6 +11,38 @@ Deployment
    - `pipelines/infra/` - pipelines for provisioning and managing kubernetes clusters
    - `pipelines/misc/` - other pipelines, e.g. for rapiDAST security scans
 
+Image check permissions
+---
+Apply following Roles and RoleBinding to allow task `check-image-existence` to verify installation images.
+Change the RoleBinding so it uses your default SA in the PIPELINE_NAMESPACE.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: global-pull-secret-reader
+  namespace: openshift-config
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["pull-secret"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pipeline-global-pull-secret
+  namespace: openshift-config
+subjects:
+  - kind: ServiceAccount
+    name: pipeline
+    namespace: PIPELINE_NAMESPACE
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: global-pull-secret-reader
+```
+
 Required secrets and configmaps
 ---
 Prior to the running of the pipeline, the following resources must be created in the pipeline namespace:
