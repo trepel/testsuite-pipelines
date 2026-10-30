@@ -33,7 +33,7 @@ spec:
   - description: Namespace to deploy MCP Gateway to
     name: mcp-gateway-namespace
     type: string
-    default: "mcp-system"
+    default: "kuadrant-system"
   - description: MCP Gateway git repository URL
     name: mcp-gateway-repo-url
     type: string
@@ -42,22 +42,10 @@ spec:
     name: mcp-gateway-revision
     type: string
     default: main
-  - description: MCP Gateway Helm chart version ('local' to use cloned repo, or specific version tag like '0.6.1')
+  - description: MCP Gateway Helm chart version ('local' to use cloned repo, or specific version tag like '1.0.2')
     name: mcp-gateway-chart-version
     type: string
     default: local
-  - description: MCP Gateway Operator catalog image. Ignored if install-productized-version is set to true or if MCP Gateway controller is bundled within Kuadrant/RHCL Operator
-    name: mcp-controller-catalog-image
-    type: string
-    default: ghcr.io/kuadrant/mcp-controller-catalog:main
-  - description: If set to 'true' the 'mcp-controller-catalog-image' param is ignored. Official Catalog is used instead. Ignored if MCP Gateway controller is bundled within Kuadrant/RHCL Operator
-    name: install-productized-version
-    type: string
-    default: "false"
-  - description: MCP Gateway OLM channel. Can be 'preview' (tech preview, nightlies) or 'stable' (releases). Ignored if MCP Gateway controller is bundled within Kuadrant/RHCL Operator
-    name: channel
-    type: string
-    default: preview
 # Kuadrant/RHCL
   - description: Install Kuadrant before MCP Gateway installation (true/false)
     name: install-kuadrant
@@ -67,19 +55,19 @@ spec:
     name: use-nightly-kuadrant
     type: string
     default: "false"
-  - description: Kuadrant operator catalog image. Ignored when use-nightly-kuadrant is true.
+  - description: Kuadrant operator catalog image. Ignored when chart-version is set or when both use-nightly-kuadrant and install-kuadrant are true.
     name: kuadrant-index-image
     type: string
     default: ""
-  - description: Helm chart version to install. If set, INDEX-IMAGE IS IGNORED. Ignored when use-nightly-kuadrant is true.
+  - description: Helm chart version to install. If set, kuadrant-index-image is ignored. Ignored when both use-nightly-kuadrant and install-kuadrant are true.
     name: chart-version
     type: string
     default: ""
-  - description: Kuadrant OLM channel. Can be 'preview' (nightlies) or 'stable' (releases). Ignored when use-nightly-kuadrant is true.
+  - description: Kuadrant OLM channel. Can be 'preview' (nightlies) or one of the stable channels (releases). Ignored when both use-nightly-kuadrant and install-kuadrant are true.
     name: kuadrant-channel
     type: string
     default: stable
-  - description: Kuadrant operator name ('kuadrant-operator' or 'rhcl-operator'). Ignored when use-nightly-kuadrant is true.
+  - description: Kuadrant operator name ('kuadrant-operator' or 'rhcl-operator'). Ignored when both use-nightly-kuadrant and install-kuadrant are true.
     name: kuadrant-operator-name
     type: string
     default: rhcl-operator
@@ -113,7 +101,7 @@ spec:
     type: string
     default: "quay.io/kuadrant/rptool:unstable"
   - description: Used as launch name suffix in Report Portal
-    name: make-target
+    name: launch-name-suffix
     type: string
     default: mcp-gateway
 # Tests
@@ -338,18 +326,12 @@ spec:
     params:
       - name: kubeconfig-path
         value: $(tasks.kubectl-login.results.kubeconfig-path)
-      - name: catalog-image
-        value: $(params.mcp-controller-catalog-image)
       - name: mcp-gateway-namespace
         value: $(params.mcp-gateway-namespace)
       - name: istio-provider
         value: $(params.istio-provider)
-      - name: channel
-        value: $(params.channel)
       - name: mcp-gateway-chart-version
         value: $(params.mcp-gateway-chart-version)
-      - name: install-productized-version
-        value: $(params.install-productized-version)
     workspaces:
     - name: shared-workspace
       workspace: shared-workspace
@@ -444,8 +426,6 @@ spec:
         value: $(tasks.kubectl-login.results.kubeconfig-path)
       - name: mcp-gateway-namespace
         value: $(params.mcp-gateway-namespace)
-      - name: istio-provider
-        value: $(params.istio-provider)
     workspaces:
     - name: shared-workspace
       workspace: shared-workspace
@@ -483,7 +463,7 @@ spec:
       - name: rptool-image
         value: $(params.rptool-image)
       - name: make-target
-        value: $(params.make-target)
+        value: $(params.launch-name-suffix)
       - name: rp-project
         value: $(params.rp-project)
     taskRef:

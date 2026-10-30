@@ -44,7 +44,7 @@ Reusable Tekton tasks in the `tasks/` directory:
   - `helm-deploy.yaml` - Deploy Kuadrant operators and instances via Helm (includes full cleanup/install cycle)
   - `check-image-existence.yaml` - Validate container images exist
   - `nightly-image-date.yaml` - Get nightly image timestamps
-  - `install-mcp-gateway.yaml` - Install MCP Gateway from a catalog image or Helm chart
+  - `install-mcp-gateway.yaml` - Install MCP Gateway instance (controller is deployed by Kuadrant/RHCL operator)
   - `import-keycloak-realm.yaml` - Import the Keycloak realm required by MCP Gateway tests
 
 - **`tasks/infra/`** - Infrastructure management tasks

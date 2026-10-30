@@ -153,12 +153,6 @@ spec:
           value: $(params.provider-credentials)
         - name: create-cmd-flags
           value: $(params.create-cmd-flags)
-        - name: index-image
-          value: $(params.index-image)
-        - name: channel
-          value: $(params.channel)
-        - name: operator-name
-          value: $(params.operator-name)
         - name: provision-cluster
           value: $(params.provision-cluster)
       runAfter:

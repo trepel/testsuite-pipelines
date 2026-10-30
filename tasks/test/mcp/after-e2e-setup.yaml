@@ -10,9 +10,6 @@ spec:
     - description: Namespace MCP Gateway was deployed to
       name: mcp-gateway-namespace
       type: string
-    - description: Gateway API provider (ocp/ossm3)
-      name: istio-provider
-      type: string
   steps:
     - name: setup-mcp-gateway-extension
       image: quay.io/kuadrant/testsuite-pipelines-tools:latest
@@ -28,12 +25,6 @@ spec:
         export BASE_DOMAIN=$(oc get dns cluster -o jsonpath='{.spec.baseDomain}')
         # Construct hosts
         export PUBLIC_HOST="mcp.apps.${BASE_DOMAIN}"
-        # Determine gateway class name based on provider
-        if [ "$(params.istio-provider)" = "ocp" ]; then
-          export GATEWAY_CLASS_NAME=openshift-default
-        else
-          export GATEWAY_CLASS_NAME=istio
-        fi
 
         GATEWAY_TLS_SECRET="$(kubectl get ingresscontroller default -n openshift-ingress-operator -o jsonpath='{.spec.defaultCertificate.name}')"
 
