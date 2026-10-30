@@ -13,12 +13,6 @@ spec:
       type: string
     - name: create-cmd-flags
       type: string
-    - name: index-image
-      type: string
-    - name: channel
-      type: string
-    - name: operator-name
-      type: string
     - name: provision-cluster
       type: string
   results:

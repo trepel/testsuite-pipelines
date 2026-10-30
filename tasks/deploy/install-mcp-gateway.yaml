@@ -10,20 +10,11 @@ spec:
     - description: MCP Gateway namespace
       name: mcp-gateway-namespace
       type: string
-    - description: MCP Controller catalog image
-      name: catalog-image
-      type: string
     - description: Istio provider (ossm3, ocp)
       name: istio-provider
       type: string
-    - description: MCP Gateway operator channel
-      name: channel
-      type: string
     - description: MCP Gateway Helm chart version ('local' to use cloned repo, or specific version tag like '0.1.0')
       name: mcp-gateway-chart-version
-      type: string
-    - description: If set to 'true' the 'catalog-image' param is ignored and official Catalog is used instead
-      name: install-productized-version
       type: string
   steps:
     - name: install-mcp-gateway
@@ -40,10 +31,7 @@ spec:
         export INSTALL_SERVICE_MESH=false
 
         export MCP_GATEWAY_NAMESPACE="$(params.mcp-gateway-namespace)"
-        export INSTALL_PRODUCTIZED_VERSION="$(params.install-productized-version)"
         export MCP_GATEWAY_VERSION="$(params.mcp-gateway-chart-version)"
-        export CATALOG_IMG="$(params.catalog-image)"
-        export CHANNEL="$(params.channel)"
 
         if [ "$(params.istio-provider)" = "ocp" ]; then
           export USE_OCP_INGRESS=true
