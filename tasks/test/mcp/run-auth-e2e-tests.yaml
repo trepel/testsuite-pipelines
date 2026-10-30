@@ -285,15 +285,45 @@ spec:
         # Configure trusted headers private key
         kubectl apply -f ./config/samples/oauth-token-exchange/trusted-headers-private-key.yaml -n $MCP_GATEWAY_NAMESPACE
 
-        # Create required AuthPolicies
-        sed -e "s|https://keycloak.127-0-0-1.sslip.io:8002|${KEYCLOAK_URL}|g" -e "s|http://mcp.127-0-0-1.sslip.io:8001|https://mcp.${E2E_DOMAIN}|g" -e "s|namespace: mcp-system|namespace: ${MCP_GATEWAY_NAMESPACE}|g" config/e2e/auth/mcp-auth-policy.yaml | \
-          kubectl apply -f -
+        # Create the gateway AuthPolicy with cluster-specific URLs and namespace
+        kubectl patch --local -f config/e2e/auth/mcp-auth-policy.yaml --type=merge \
+          --patch-file /dev/stdin -o yaml <<EOF | kubectl apply -f -
+        metadata:
+          namespace: ${MCP_GATEWAY_NAMESPACE}
+        spec:
+          rules:
+            authentication:
+              keycloak:
+                jwt:
+                  issuerUrl: ${KEYCLOAK_URL}/realms/mcp
+            response:
+              unauthenticated:
+                headers:
+                  WWW-Authenticate:
+                    value: Bearer resource_metadata=https://mcp.${E2E_DOMAIN}/.well-known/oauth-protected-resource/mcp
+              unauthorized:
+                headers:
+                  WWW-Authenticate:
+                    value: Bearer resource_metadata=https://mcp.${E2E_DOMAIN}/.well-known/oauth-protected-resource/mcp
+        EOF
 
-        # The auth test suite expects backend tool authorization denials to return 403.
-        sed -e "s|https://keycloak.127-0-0-1.sslip.io:8002|${KEYCLOAK_URL}|g" -e "s|http://mcp.127-0-0-1.sslip.io:8001|https://mcp.${E2E_DOMAIN}|g" config/e2e/auth/mcps-auth-policy.yaml | \
-          kubectl patch --local -f - --type=merge \
-            -p '{"spec":{"rules":{"response":{"unauthorized":{"code":403}}}}}' -o yaml | \
-          kubectl apply -f -
+        # The auth test suite expects backend tool authorization denials to return 403
+        kubectl patch --local -f config/e2e/auth/mcps-auth-policy.yaml --type=merge \
+          --patch-file /dev/stdin -o yaml <<EOF | kubectl apply -f -
+        spec:
+          rules:
+            authentication:
+              keycloak:
+                jwt:
+                  issuerUrl: ${KEYCLOAK_URL}/realms/mcp
+            response:
+              unauthenticated:
+                headers:
+                  WWW-Authenticate:
+                    value: Bearer resource_metadata=https://mcp.${E2E_DOMAIN}/.well-known/oauth-protected-resource/mcp
+              unauthorized:
+                code: 403
+        EOF
 
         # Patch Authorino to trust default OpenShift ingress certificate
         # Already done as part of Kuadrant installation
